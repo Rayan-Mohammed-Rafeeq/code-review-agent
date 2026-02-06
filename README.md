@@ -87,20 +87,19 @@ If your API isn’t at `http://127.0.0.1:8000`, set:
 
 ---
 
-## Configuration
+## Deployment environment variables
 
-Configuration is loaded from environment variables and supports a local `.env` file
-(see `app/settings.py`).
+### Streamlit UI
 
-### Required (for real LLM calls)
+- `CODE_REVIEW_API_URL` — base URL of your deployed API
+  - Example: `https://my-code-review-api.onrender.com`
 
-- `LLM_API_KEY` — API key for the OpenAI-compatible provider
-- `LLM_BASE_URL` — base URL that serves `POST /chat/completions`
-  - Example: `https://api.openai.com/v1`
-  - Note: if you pass `https://api.openai.com`, the client normalizes it to `.../v1`
-- `LLM_MODEL` — model name supported by your provider
+### FastAPI backend
 
-### Optional
+- `CODE_REVIEW_CORS_ORIGINS` — comma-separated list of allowed browser origins
+  - Example: `https://code-review-agent.streamlit.app`
+  - Example (multiple): `https://my-ui.example.com,https://my-ui2.example.com`
+
 
 - `LLM_PROVIDER` — defaults to `openai`
   - Set `LLM_PROVIDER=none` to **disable LLM calls** (offline mode)

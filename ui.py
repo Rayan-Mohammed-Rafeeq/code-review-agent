@@ -69,6 +69,10 @@ with col_title:
 
 API_BASE_URL = os.environ.get("CODE_REVIEW_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
+def _is_default_local_api(url: str) -> bool:
+    u = (url or "").strip().lower().rstrip("/")
+    return u in {"http://127.0.0.1:8000", "http://localhost:8000"}
+
 def _healthcheck(base_url: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Returns (ok, message, json_payload_if_any). Never raises."""
     try:
@@ -107,6 +111,13 @@ def _post_review(base_url: str, *, code: str, language: str = "python", filename
 with st.sidebar:
     st.subheader("Backend")
     st.write("API:", API_BASE_URL)
+
+    if _is_default_local_api(API_BASE_URL) and os.getenv("CODE_REVIEW_API_URL") is None:
+        st.warning(
+            "This UI is pointing at 127.0.0.1:8000. That only works on your own machine. "
+            "In a deployed Streamlit app, set the CODE_REVIEW_API_URL environment variable to your hosted API."
+        )
+        st.caption("Example: https://your-api.example.com")
 
     # Small cache so we don't spam /healthz on every widget interaction.
     now = time.time()

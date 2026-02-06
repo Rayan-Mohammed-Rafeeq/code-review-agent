@@ -5,6 +5,7 @@ import os
 
 from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai_agent import CodeReviewAgent
 from app import deps
@@ -21,6 +22,34 @@ logger = logging.getLogger("code_review_agent")
 APP_VERSION = "1.0.0"
 
 app = FastAPI(title="Code Review Agent", version=APP_VERSION)
+
+# --- CORS (for Streamlit UI / browser clients) ---
+# In local dev, UI and API often run on different ports (8501 vs 8000).
+# In deployment, they are almost always different origins.
+#
+# Configure allowed origins via CODE_REVIEW_CORS_ORIGINS.
+# Examples:
+#   CODE_REVIEW_CORS_ORIGINS=https://code-review-agent.streamlit.app
+#   CODE_REVIEW_CORS_ORIGINS=https://my-ui.example.com,https://my-ui2.example.com
+_cors_origins_raw = (os.getenv("CODE_REVIEW_CORS_ORIGINS") or "").strip()
+if _cors_origins_raw:
+    cors_origins = [o.strip().rstrip("/") for o in _cors_origins_raw.split(",") if o.strip()]
+else:
+    # Safe-ish default for local dev.
+    cors_origins = [
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+        "http://localhost",
+        "http://127.0.0.1",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
