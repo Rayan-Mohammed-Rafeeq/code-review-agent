@@ -5,6 +5,10 @@
 
 # Code Review Agent (FastAPI)
 
+Live demo: [Streamlit UI](https://code-review-agent.streamlit.app) · [Project Docs (Google Doc)](https://docs.google.com/document/d/1iA7EJV4YMokp1tFQOG0eAqqlLqOn_EJI/edit?usp=drive_link&ouid=109768856802920614574&rtpof=true&sd=true)
+
+> If you don’t have a deployed UI/API yet, update the URLs above to match your hosting.
+
 A production-quality, modular AI-powered code review service that combines:
 - **Static analysis** (flake8 + bandit, with a small built-in fallback)
 - **Context compression** for shorter / cheaper prompts
@@ -228,4 +232,3 @@ responses include `tool_error` / `stderr` to help diagnose environment issues.
 - Never commit real API keys.
 - Prefer using a local `.env` file for development.
 - The `/configz` endpoint intentionally never returns your key.
-
