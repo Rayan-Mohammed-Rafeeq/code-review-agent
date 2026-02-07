@@ -67,7 +67,20 @@ with col_title:
     st.markdown('<div class="cra-title">Code Review Agent</div>', unsafe_allow_html=True)
     st.markdown('<div class="cra-subtitle">Automated AI-powered code reviewer</div>', unsafe_allow_html=True)
 
-API_BASE_URL = os.environ.get("CODE_REVIEW_API_URL", "http://127.0.0.1:8000").rstrip("/")
+# Prefer an explicitly configured URL, but fall back to:
+# - Render-hosted backend (so a deployed Streamlit app works out of the box)
+# - local dev (127.0.0.1) if you’re running the UI locally
+_DEFAULT_API_CANDIDATES = [
+    # Your known Render deployment (can be overridden by env var).
+    "https://code-review-agent-api.onrender.com",
+    # Local dev fallback.
+    "http://127.0.0.1:8000",
+]
+
+API_BASE_URL = os.environ.get("CODE_REVIEW_API_URL")
+if API_BASE_URL is None or not API_BASE_URL.strip():
+    API_BASE_URL = _DEFAULT_API_CANDIDATES[0]
+API_BASE_URL = API_BASE_URL.rstrip("/")
 
 def _is_default_local_api(url: str) -> bool:
     u = (url or "").strip().lower().rstrip("/")
