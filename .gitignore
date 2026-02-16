@@ -11,11 +11,24 @@ venv/
 
 # Local env files (secrets)
 .env
+.env.*
+!.env.example
+
+# Typical local secret/config files
+firebase-service-account.json
+*.pem
+*.key
+
+# Streamlit
+.streamlit/secrets.toml
 
 # Test / runtime outputs
 *_out.json
 *.log
 .tmp*
+.pytest_cache/
+.coverage
+htmlcov/
 
 # IDE
 .idea/

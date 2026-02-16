@@ -17,13 +17,13 @@ def f(x: int) -> int:
     out = compress_python_code(code).text
     assert "module doc" not in out
     assert "# comment" not in out
-    assert "\"\"\"doc\"\"\"" not in out
+    assert '"""doc"""' not in out
     assert "def f" in out
     assert "if x > 0" in out
 
 
 def test_compress_emits_imports_and_external_calls():
-    code = '''
+    code = """
 import os
 from requests import get
 
@@ -32,7 +32,7 @@ def g(url: str):
     os.path.join("a", "b")
     print(r)
     return r
-'''
+"""
     out = compress_python_code(code).text
     assert "import os" in out
     assert "from requests import get" in out

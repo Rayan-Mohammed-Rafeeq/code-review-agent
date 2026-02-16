@@ -1,0 +1,10 @@
+{
+  "include": ["app", "tests"],
+  "exclude": ["**/__pycache__", ".venv", "ui.py", "scripts"],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.11",
+  "reportMissingTypeStubs": false,
+  "reportArgumentType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false
+}

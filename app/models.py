@@ -34,9 +34,7 @@ class ReviewRequest(BaseModel):
     filename: Optional[str] = Field(default="input.py", description="Optional filename for diagnostics")
     strict: bool = Field(
         default=False,
-        description=(
-            "When true, the API also returns a strict, human-readable findings string in a fixed format."
-        ),
+        description=("When true, the API also returns a strict, human-readable findings string in a fixed format."),
     )
 
 

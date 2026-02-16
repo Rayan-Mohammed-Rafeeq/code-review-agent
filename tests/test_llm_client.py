@@ -15,7 +15,9 @@ def _mock_transport(payload: dict, status_code: int = 200) -> httpx.MockTranspor
     return httpx.MockTransport(handler)
 
 
-def _mock_transport_assert_user_content(expected_substring: str, payload: dict, status_code: int = 200) -> httpx.MockTransport:
+def _mock_transport_assert_user_content(
+    expected_substring: str, payload: dict, status_code: int = 200
+) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content.decode("utf-8"))
         assert body["messages"][1]["role"] == "user"

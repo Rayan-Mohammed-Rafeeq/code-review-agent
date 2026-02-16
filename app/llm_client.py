@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import ValidationError
 
-from app.models import Issue, LLM_JSON_SCHEMA
+from app.models import LLM_JSON_SCHEMA, Issue
 
 logger = logging.getLogger("code_review_agent.llm")
 
@@ -27,7 +27,7 @@ def _looks_like_placeholder_key(api_key: str) -> bool:
     if "*" in api_key:
         return True
     # Common copy/paste mistake: including surrounding quotes
-    if (api_key.startswith("\"") and api_key.endswith("\"")) or (api_key.startswith("'") and api_key.endswith("'")):
+    if (api_key.startswith('"') and api_key.endswith('"')) or (api_key.startswith("'") and api_key.endswith("'")):
         return True
     return False
 
@@ -47,7 +47,7 @@ def _normalize_base_url(base_url: str) -> str:
         return url
 
     # Remove surrounding quotes
-    if (url.startswith("\"") and url.endswith("\"")) or (url.startswith("'") and url.endswith("'")):
+    if (url.startswith('"') and url.endswith('"')) or (url.startswith("'") and url.endswith("'")):
         url = url[1:-1].strip()
 
     url = url.rstrip("/")
@@ -189,12 +189,12 @@ async def request_llm_review(
         if (review_prompt is not None and str(review_prompt).strip() != "")
         else (
             "You MUST return ONLY a JSON object with exactly this shape:\n"
-            "{\"issues\": [ {\"severity\": \"high|medium|low\", \"category\": \"security|bug|performance|style\", "
-            "\"description\": \"...\", \"suggestion\": \"...\", \"location\": null or string } ] }\n\n"
+            '{"issues": [ {"severity": "high|medium|low", "category": "security|bug|performance|style", '
+            '"description": "...", "suggestion": "...", "location": null or string } ] }\n\n'
             "Rules:\n"
             "- Do not include markdown.\n"
             "- Every issue item MUST include severity, category, description, suggestion.\n"
-            "- If there are no problems, return an empty list: {\"issues\": []}.\n\n"
+            '- If there are no problems, return an empty list: {"issues": []}.\n\n'
             "Here is a JSON Schema for reference (not output):\n"
             + json.dumps(LLM_JSON_SCHEMA)
             + "\n\nInput:\n"
@@ -272,7 +272,11 @@ async def request_llm_review(
                             category="bug",
                             description="LLM returned non-JSON content",
                             suggestion="This provider likely doesn't support response_format=json_object. Enforce JSON via the prompt.",
-                            metadata={"error": "non_json_content", "detail": str(exc), "content_snippet": raw_content[:500]},
+                            metadata={
+                                "error": "non_json_content",
+                                "detail": str(exc),
+                                "content_snippet": raw_content[:500],
+                            },
                         )
                     ]
 
@@ -327,7 +331,9 @@ async def request_llm_review(
                     try:
                         issues.append(Issue.model_validate(item_norm))
                     except ValidationError as e:
-                        invalid_items.append({"item": item, "normalized": item_norm, "error": "validation_error", "detail": e.errors()})
+                        invalid_items.append(
+                            {"item": item, "normalized": item_norm, "error": "validation_error", "detail": e.errors()}
+                        )
 
                 if issues:
                     if invalid_items:
@@ -364,8 +370,12 @@ async def request_llm_review(
 
         return [
             Issue(
-                severity="high",
-                category="bug",
+                severity=Issue.model_fields["severity"].annotation.high
+                if hasattr(Issue.model_fields["severity"].annotation, "high")
+                else "high",
+                category=Issue.model_fields["category"].annotation.bug
+                if hasattr(Issue.model_fields["category"].annotation, "bug")
+                else "bug",
                 description=f"LLM request failed: HTTP {status}",
                 suggestion=_status_suggestion(status, text, base_url=base_url, model=model),
                 metadata={
@@ -385,8 +395,12 @@ async def request_llm_review(
         )
         return [
             Issue(
-                severity="high",
-                category="bug",
+                severity=Issue.model_fields["severity"].annotation.high
+                if hasattr(Issue.model_fields["severity"].annotation, "high")
+                else "high",
+                category=Issue.model_fields["category"].annotation.bug
+                if hasattr(Issue.model_fields["category"].annotation, "bug")
+                else "bug",
                 description=f"LLM request failed: {type(e).__name__}",
                 suggestion="Check network connectivity, credentials, base URL, and try again.",
                 metadata={"error": "http_error", "detail": str(e)},
@@ -395,8 +409,12 @@ async def request_llm_review(
     except ValueError as e:
         return [
             Issue(
-                severity="high",
-                category="bug",
+                severity=Issue.model_fields["severity"].annotation.high
+                if hasattr(Issue.model_fields["severity"].annotation, "high")
+                else "high",
+                category=Issue.model_fields["category"].annotation.bug
+                if hasattr(Issue.model_fields["category"].annotation, "bug")
+                else "bug",
                 description="LLM response was not valid JSON",
                 suggestion="Retry; if it persists, log the raw response and adjust the LLM prompt/response_format.",
                 metadata={"error": "invalid_json", "detail": str(e)},
@@ -411,8 +429,12 @@ async def request_llm_review(
     except json.JSONDecodeError as e:
         return [
             Issue(
-                severity="high",
-                category="bug",
+                severity=Issue.model_fields["severity"].annotation.high
+                if hasattr(Issue.model_fields["severity"].annotation, "high")
+                else "high",
+                category=Issue.model_fields["category"].annotation.bug
+                if hasattr(Issue.model_fields["category"].annotation, "bug")
+                else "bug",
                 description="LLM returned non-JSON content",
                 suggestion="Ensure response_format=json_object is supported by your provider; otherwise enforce JSON in the prompt.",
                 metadata={"error": "non_json_content", "detail": str(e), "content_snippet": raw_content[:500]},
@@ -423,8 +445,12 @@ async def request_llm_review(
     if not isinstance(issues_raw, list):
         return [
             Issue(
-                severity="high",
-                category="bug",
+                severity=Issue.model_fields["severity"].annotation.high
+                if hasattr(Issue.model_fields["severity"].annotation, "high")
+                else "high",
+                category=Issue.model_fields["category"].annotation.bug
+                if hasattr(Issue.model_fields["category"].annotation, "bug")
+                else "bug",
                 description="LLM JSON response missing 'issues' array",
                 suggestion="Update the prompt/schema to always include an 'issues' array.",
                 metadata={"error": "missing_issues", "response": parsed_obj},
@@ -517,7 +543,9 @@ async def request_llm_review(
             return True
 
         # 1) "no documentation" while a docstring exists.
-        if ("docstring" in desc or "documentation" in desc or "comments" in desc) and ("does not" in desc or "missing" in desc):
+        if ("docstring" in desc or "documentation" in desc or "comments" in desc) and (
+            "does not" in desc or "missing" in desc
+        ):
             if _has_any_docstring(code_snippet):
                 return True
 
@@ -530,7 +558,9 @@ async def request_llm_review(
                 return True
 
         # 3) Generic naming nits for trivial examples.
-        if ("more descriptive name" in desc or "improve readability" in desc or "consider using" in desc) and "name" in desc:
+        if (
+            "more descriptive name" in desc or "improve readability" in desc or "consider using" in desc
+        ) and "name" in desc:
             if "def add" in code_snippet:
                 return True
 
@@ -554,7 +584,9 @@ async def request_llm_review(
         try:
             issues.append(Issue.model_validate(item_norm))
         except ValidationError as e:
-            invalid_items.append({"item": item, "normalized": item_norm, "error": "validation_error", "detail": e.errors()})
+            invalid_items.append(
+                {"item": item, "normalized": item_norm, "error": "validation_error", "detail": e.errors()}
+            )
 
     if issues:
         if invalid_items:
@@ -608,6 +640,51 @@ class LLMClient:
             static_analysis=static_analysis,
             review_prompt=review_prompt,
         )
+
+    async def raw_review_json(self, *, review_payload: str) -> str:
+        """Return a JSON string from the underlying LLM.
+
+        In offline mode (provider=none), return an empty schema.
+        """
+        provider = (getattr(self, "_provider", None) or "").lower().strip()  # type: ignore[attr-defined]
+        if provider == "none":
+            return '{"issues": []}'
+
+        # Prefer a generic 'complete' style method if present.
+        if hasattr(self, "_complete"):
+            # type: ignore[attr-defined]
+            return await self._complete(prompt=review_payload)
+
+        # Fallback: reuse existing review() method if available.
+        if hasattr(self, "review"):
+            issues = await self.review(compressed_context="", static_analysis={}, review_prompt=review_payload)
+            # Convert existing Issue models to the new JSON schema best-effort
+            converted = []
+            for it in issues:
+                loc = getattr(it, "location", None) or ""
+                line = 1
+                # Parse things like "input.py:12" or "line 12"
+                for token in [":", "line"]:
+                    if token in loc:
+                        try:
+                            line = int("".join(ch for ch in loc.split(token)[-1] if ch.isdigit()) or "1")
+                        except ValueError:
+                            line = 1
+                        break
+                converted.append(
+                    {
+                        "line": line,
+                        "category": getattr(it, "category", "style"),
+                        "severity": getattr(it, "severity", "medium"),
+                        "description": getattr(it, "description", ""),
+                        "suggestion": getattr(it, "suggestion", ""),
+                    }
+                )
+            import json as _json
+
+            return _json.dumps({"issues": converted})
+
+        raise RuntimeError("LLM client does not support raw JSON review")
 
 
 def _extract_message_content(openai_response: dict[str, Any]) -> str:

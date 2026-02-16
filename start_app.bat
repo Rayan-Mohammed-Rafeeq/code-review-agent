@@ -6,8 +6,8 @@ REM ============================================================
 
 setlocal enabledelayedexpansion
 
-REM Navigate to project directory
-cd /d E:\PycharmProjects\code-review-agent
+REM Navigate to project directory (this script's folder)
+cd /d %~dp0
 
 echo.
 echo ============================================================

@@ -35,16 +35,12 @@ echo 12. Show slowest tests
 echo 13. Generate coverage report
 echo 14. Run with debugging
 echo.
-echo CONFIGURATION:
-echo 15. Verify ScaleDown config
-echo 16. Verify API key
-echo.
-echo 17. Exit
+echo 15. Exit
 echo.
 echo ============================================================
 echo.
 
-set /p choice="Enter your choice (1-17): "
+set /p choice="Enter your choice (1-15): "
 
 if "%choice%"=="1" goto test_all
 if "%choice%"=="2" goto test_verbose
@@ -60,9 +56,7 @@ if "%choice%"=="11" goto test_fail_fast
 if "%choice%"=="12" goto test_slowest
 if "%choice%"=="13" goto test_coverage
 if "%choice%"=="14" goto test_debug
-if "%choice%"=="15" goto verify_scaledown
-if "%choice%"=="16" goto verify_api
-if "%choice%"=="17" goto end
+if "%choice%"=="15" goto end
 
 goto menu
 
@@ -154,18 +148,6 @@ goto menu
 :test_debug
 echo Running tests with debugging (drops into debugger on failure)...
 pytest -v -s --pdb
-pause
-goto menu
-
-:verify_scaledown
-echo Verifying ScaleDown configuration...
-python test_scaledown_provider.py
-pause
-goto menu
-
-:verify_api
-echo Verifying API key...
-python validate_api_key.py
 pause
 goto menu
 

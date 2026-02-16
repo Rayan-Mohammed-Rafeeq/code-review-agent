@@ -39,4 +39,3 @@ def format_strict_findings(issues: Iterable[Issue]) -> str:
         )
 
     return "\n\n".join(blocks) + "\n"
-

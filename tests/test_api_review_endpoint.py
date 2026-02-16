@@ -1,9 +1,16 @@
+import os
+
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
 def test_post_review_returns_ranked_issues(monkeypatch):
+    os.environ["LLM_PROVIDER"] = "openai"
+    os.environ["LLM_API_KEY"] = "test"
+    os.environ["LLM_BASE_URL"] = "http://test"
+    os.environ["LLM_MODEL"] = "test"
+
     async def fake_review(self, *, compressed_context: str, static_analysis: dict):
         # Unsorted on purpose: should come back ordered by severity then category.
         return [
@@ -57,49 +64,42 @@ def test_post_review_returns_ranked_issues(monkeypatch):
     assert issues[2]["severity"] == "low" and issues[2]["category"] == "style"
 
 
-def test_post_review_missing_llm_config_returns_400():
-    # The backend supports running without LLM calls when LLM_PROVIDER=none.
-    # Make this test deterministic by forcing offline settings and stubbing the agent
-    # to return no issues.
-    from app.settings import Settings
-    from app import deps
+def test_post_review_missing_llm_config_returns_400(client):
+    os.environ["LLM_PROVIDER"] = "openai"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
 
-    def fake_get_settings_dep() -> Settings:
-        return Settings(llm_provider="none", llm_api_key="", llm_base_url="", llm_model="")
+    r = client.post(
+        "/review",
+        json={"code": "print('hi')\n", "language": "python", "filename": "x.py", "strict": False},
+    )
+    assert r.status_code == 400
+    assert "LLM is not configured" in r.text
 
-    app.dependency_overrides[deps.get_settings_dep] = fake_get_settings_dep
 
-    # Stub agent.review so the test doesn't depend on any LLM behavior.
-    from app.ai_agent import CodeReviewAgent
+def test_post_review_offline_mode_succeeds_without_llm_config(client):
+    os.environ["LLM_PROVIDER"] = "none"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
 
-    async def fake_agent_review(self, *, code: str, filename: str, language: str = "python", strict: bool = False):
-        from app.static_checks import run_static_analysis
-
-        static = run_static_analysis(code=code, filename=filename)
-        static_dict = {"flake8": static.flake8, "bandit": static.bandit}
-        return "", static_dict, []
-
-    try:
-        from pytest import MonkeyPatch
-
-        mp = MonkeyPatch()
-        mp.setattr(CodeReviewAgent, "review", fake_agent_review)
-
-        client = TestClient(app)
-        resp = client.post("/review", json={"code": "def add(a,b):\n    return a+b\n", "filename": "t.py"})
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        assert data.get("issues") == []
-        assert "static_analysis" in data
-    finally:
-        app.dependency_overrides.clear()
-        try:
-            mp.undo()  # type: ignore[name-defined]
-        except Exception:
-            pass
+    r = client.post(
+        "/review",
+        json={"code": "print('hi')\n", "language": "python", "filename": "x.py", "strict": False},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["issues"] == []
+    assert "static_analysis" in body
 
 
 def test_post_review_strict_mode_returns_formatted_findings(monkeypatch):
+    os.environ["LLM_PROVIDER"] = "openai"
+    os.environ["LLM_API_KEY"] = "test"
+    os.environ["LLM_BASE_URL"] = "http://test"
+    os.environ["LLM_MODEL"] = "test"
+
     async def fake_review(self, *, compressed_context: str, static_analysis: dict):
         return [
             {

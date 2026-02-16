@@ -5,9 +5,7 @@
 
 # Code Review Agent (FastAPI)
 
-Live demo: [Streamlit UI](https://code-review-agent.streamlit.app) · [Project Docs (Google Doc)](https://docs.google.com/document/d/1iA7EJV4YMokp1tFQOG0eAqqlLqOn_EJI/edit?usp=drive_link&ouid=109768856802920614574&rtpof=true&sd=true)
-
-> If you don’t have a deployed UI/API yet, update the URLs above to match your hosting.
+> If you have a deployed UI/API, add the URLs here. Otherwise, keep this repo runnable locally.
 
 A production-quality, modular AI-powered code review service that combines:
 - **Static analysis** (flake8 + bandit, with a small built-in fallback)
@@ -15,6 +13,15 @@ A production-quality, modular AI-powered code review service that combines:
 - **LLM-backed review** (OpenAI-compatible Chat Completions)
 - **Optional prompt compression via ScaleDown** (compression only; not an LLM)
 - **Optional Streamlit UI** for interactive reviews
+
+---
+
+## Before you push to GitHub (quick safety checklist)
+
+- Do **not** commit `.env` or any Firebase service account JSON.
+- Use `.env.example` as the template for local development.
+- For judge/evaluator runs with no secrets, use **offline mode**: `LLM_PROVIDER=none`.
+- `start_app.bat` is path-independent and should work from any folder.
 
 ---
 
@@ -35,6 +42,13 @@ A production-quality, modular AI-powered code review service that combines:
 
 ## Quick start (Windows / cmd.exe)
 
+### 0) Judge-friendly default: offline mode (no network, no secrets)
+
+If you're running this for evaluation without any external credentials, set:
+- `LLM_PROVIDER=none`
+
+In this mode the API still performs **compression + static analysis**, and returns an empty `issues[]` list (deterministic, no network calls).
+
 ### 1) Create a virtualenv + install dependencies
 
 ```cmd
@@ -43,14 +57,15 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2) Configure the LLM
+### 2) Configure the LLM (optional)
 
-This backend requires an OpenAI-compatible Chat Completions endpoint.
-
-Set these environment variables (or create a `.env` file in the repo root):
+If you want LLM-backed reviews, configure these environment variables (or create a `.env` file in the repo root):
 - `LLM_API_KEY`
 - `LLM_BASE_URL` (example: `https://api.openai.com/v1`)
 - `LLM_MODEL` (example: `gpt-4o-mini`)
+
+Security note:
+- Never commit `.env` or Firebase service-account JSON keys. Use `.env.example` as a template.
 
 ### 3) Run the API
 
@@ -67,6 +82,12 @@ Open:
 ## Run the UI (Streamlit)
 
 The repo includes a Streamlit frontend in `ui.py`.
+
+### Auth in the UI
+
+Auth is disabled in the UI.
+
+If your API requires authentication, call it directly (e.g., via curl/Postman) or put the Streamlit app behind your own auth layer.
 
 ### Option A: Start everything with the provided script
 
@@ -86,7 +107,7 @@ If you already started the backend:
 streamlit run ui.py
 ```
 
-If your API isn’t at `http://127.0.0.1:8000`, set:
+If your API isnt at `http://127.0.0.1:8000`, set:
 - `CODE_REVIEW_API_URL` (used by the UI)
 
 ---
@@ -95,20 +116,20 @@ If your API isn’t at `http://127.0.0.1:8000`, set:
 
 ### Streamlit UI
 
-- `CODE_REVIEW_API_URL` — base URL of your deployed API
+- `CODE_REVIEW_API_URL`  base URL of your deployed API
   - Example: `https://my-code-review-api.onrender.com`
 
 ### FastAPI backend
 
-- `CODE_REVIEW_CORS_ORIGINS` — comma-separated list of allowed browser origins
-  - Example: `https://code-review-agent.streamlit.app`
+- `CODE_REVIEW_CORS_ORIGINS`  comma-separated list of allowed browser origins
+  - Example: `https://my-ui.example.com`
   - Example (multiple): `https://my-ui.example.com,https://my-ui2.example.com`
 
 
-- `LLM_PROVIDER` — defaults to `openai`
+- `LLM_PROVIDER`  defaults to `openai`
   - Set `LLM_PROVIDER=none` to **disable LLM calls** (offline mode)
-- `LLM_TIMEOUT_SECONDS` — request timeout (default: 30)
-- `SCALEDOWN_API_KEY` — enables ScaleDown prompt compression (optional)
+- `LLM_TIMEOUT_SECONDS`  request timeout (default: 30)
+- `SCALEDOWN_API_KEY`  enables ScaleDown prompt compression (optional)
 
 ### Offline mode (no network / no LLM)
 
@@ -145,11 +166,11 @@ Upload a UTF-8 Python file using `multipart/form-data` with the field name `file
 ### Response shape
 
 High-level response fields:
-- `compressed_context` — compressed code summary
-- `static_analysis` — tool outputs:
+- `compressed_context`  compressed code summary
+- `static_analysis`  tool outputs:
   - `static_analysis.flake8.issues[]`
   - `static_analysis.bandit.result.results[]`
-- `issues[]` — structured items:
+- `issues[]`  structured items:
   - `severity`: `high | medium | low`
   - `category`: `security | bug | performance | style`
   - `description`, `suggestion`
@@ -164,7 +185,7 @@ High-level response fields:
 
 ## How it works (high level)
 
-The backend’s review pipeline (see `app/ai_agent.py`):
+The backends review pipeline (see `app/ai_agent.py`):
 1. **Compress code** (`app/compressor.py`)
 2. **Run static analysis** (`app/static_checks.py`)
 3. **Build a review prompt** that includes compressed context + static results
@@ -182,7 +203,7 @@ Run all tests:
 pytest
 ```
 
-There’s also an interactive menu script:
+Theres also an interactive menu script:
 
 ```cmd
 run_tests.bat
@@ -192,7 +213,7 @@ run_tests.bat
 
 ## Troubleshooting
 
-### 400: “LLM is not configured (missing: …)”
+### 400: LLM is not configured (missing: )
 
 Set `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`, then restart the API.
 
@@ -216,14 +237,14 @@ responses include `tool_error` / `stderr` to help diagnose environment issues.
 
 ## Project structure
 
-- `app/main.py` — FastAPI app and endpoints
-- `app/ai_agent.py` — orchestrates compression + static checks + LLM review
-- `app/llm_client.py` — OpenAI-compatible client + safe JSON parsing
-- `app/static_checks.py` — flake8 + bandit runner with small builtin fallback
-- `app/compressor.py` — Python code compression
-- `app/scaledown_compression.py` — optional ScaleDown prompt compression
-- `ui.py` — Streamlit frontend
-- `tests/` — pytest suite
+- `app/main.py`  FastAPI app and endpoints
+- `app/ai_agent.py`  orchestrates compression + static checks + LLM review
+- `app/llm_client.py`  OpenAI-compatible client + safe JSON parsing
+- `app/static_checks.py`  flake8 + bandit runner with small builtin fallback
+- `app/compressor.py`  Python code compression
+- `app/scaledown_compression.py`  optional ScaleDown prompt compression
+- `ui.py`  Streamlit frontend
+- `tests/`  pytest suite
 
 ---
 
@@ -232,3 +253,39 @@ responses include `tool_error` / `stderr` to help diagnose environment issues.
 - Never commit real API keys.
 - Prefer using a local `.env` file for development.
 - The `/configz` endpoint intentionally never returns your key.
+
+## Firebase Auth (optional)
+
+The backend can verify Firebase ID tokens if you provide a Firebase **Admin SDK service account**.
+
+### Backend credentials discovery
+
+The backend looks for credentials in this order:
+
+1. `FIREBASE_SERVICE_ACCOUNT_JSON`  an env var containing the full service account JSON
+2. `FIREBASE_SERVICE_ACCOUNT_FILE`  a path to a JSON file
+3. A file named `firebase-service-account.json` in the repo root (current working directory)
+
+If none are provided (or initialization fails), the backend falls back to the built-in demo auth.
+
+### Troubleshooting: `CONFIGURATION_NOT_FOUND`
+
+This error is almost always a **project mismatch**:
+
+- Your frontend is generating an ID token for Firebase project **A**
+- Your backend service account JSON belongs to project **B**
+
+To debug locally:
+
+- Visit `GET /configz` and check `firebase.credential_source` and `firebase.initialized`.
+- Call `GET /auth/firebase_debug` with your `Authorization: Bearer <id_token>` header.
+  It returns **unverified** token hints like `iss` and the inferred `firebase_project_id`.
+
+Fix is to ensure the tokens project (from `iss`) matches the service account JSON `project_id`.
+
+## Quality gates (optional but recommended)
+
+This repo includes lightweight tooling to show real engineering beyond raw LLM output:
+- Lint: `ruff check .`
+- Format: `ruff format .`
+- Types: `pyright`

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.models import Category, Issue, Severity
 
-
 # Priority contract:
 # - Highest severity first: high > medium > low
 # - Then by category: security > bug > performance > style
