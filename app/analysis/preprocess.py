@@ -14,4 +14,3 @@ def preprocess_code(*, code: str) -> str:
     c = "\n".join(line.rstrip() for line in c.split("\n"))
     # Dedent is safe for snippets/pasted code; no-op for regular modules.
     return textwrap.dedent(c).lstrip("\n")
-

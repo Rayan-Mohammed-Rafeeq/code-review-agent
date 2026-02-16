@@ -32,6 +32,7 @@ class _OfflineLLMClient(LLMClient):
 # NOTE: Do not cache across process lifetime. Tests toggle env vars and monkeypatch
 # LLMClient methods; caching breaks determinism.
 
+
 def get_llm_client() -> LLMClient:
     s = get_settings_dep()
 
@@ -49,7 +50,7 @@ def get_llm_client() -> LLMClient:
 
 
 def get_agent() -> CodeReviewAgent:
-    s: Settings = get_settings_dep()
+    # Settings are used inside get_llm_client(); no need to bind them here.
     return CodeReviewAgent(get_llm_client())
 
 

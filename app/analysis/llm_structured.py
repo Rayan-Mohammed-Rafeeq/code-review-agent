@@ -22,8 +22,8 @@ class LLMResponse(BaseModel):
 def build_llm_instructions(*, strict: bool) -> str:
     return (
         "Return JSON only. No markdown, no code fences, no extra keys. "
-        "Schema: {\"issues\":[{\"line\":int,\"category\":\"bug|performance|security|style\"," 
-        "\"severity\":\"critical|high|medium|low|info\",\"description\":str,\"suggestion\":str}]} "
+        'Schema: {"issues":[{"line":int,"category":"bug|performance|security|style",'
+        '"severity":"critical|high|medium|low|info","description":str,"suggestion":str}]} '
         + ("Be strict and exhaustive." if strict else "Prioritize high-signal issues.")
     )
 

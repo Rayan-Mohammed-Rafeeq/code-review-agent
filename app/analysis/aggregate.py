@@ -35,4 +35,3 @@ def dedupe_issues(issues: list[Issue]) -> list[Issue]:
         i.fingerprint = fp
         out.append(i)
     return out
-

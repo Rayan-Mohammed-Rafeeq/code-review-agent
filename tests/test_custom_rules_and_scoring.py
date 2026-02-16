@@ -8,7 +8,9 @@ from app.analysis.pipeline import ReviewPipeline
 
 class DummyLLM:
     async def raw_review_json(self, *, review_payload: str) -> str:  # noqa: ARG002
-        return '{"issues": [{"line": 1, "category": "style", "severity": "info", "description": "x", "suggestion": "y"}]}'
+        return (
+            '{"issues": [{"line": 1, "category": "style", "severity": "info", "description": "x", "suggestion": "y"}]}'
+        )
 
 
 @pytest.mark.asyncio
@@ -96,4 +98,3 @@ def is_even(n):
     r = await p.review_file(filename="a.py", code=code, strict=False)
 
     assert any(i.code == "L800-inverted-predicate" for i in r.issues)
-

@@ -69,4 +69,3 @@ class ReviewResult(BaseModel):
 class ProjectReviewResult(BaseModel):
     files: dict[str, ReviewResult]
     overall: ReviewResult
-

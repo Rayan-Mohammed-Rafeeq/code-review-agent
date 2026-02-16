@@ -401,4 +401,3 @@ def run_logical_checks(*, code: str, filename: str, strict: bool) -> list[Issue]
     _InvertedPredicate().visit(tree)
 
     return issues
-

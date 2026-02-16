@@ -72,23 +72,49 @@ def _apply_theme(*, mode: str) -> None:
             --cra-radius: 16px;
           }}
 
-          /* Remove ONLY the decorative rounded gradient bar at the very top.
-             Streamlit renders it as stDecoration or via a ::before pseudo-element.
-             Keep this narrow to avoid accidentally hiding layout containers (including the sidebar). */
-          div[data-testid="stDecoration"] {{
-            display: none !important;
-            height: 0 !important;
-            min-height: 0 !important;
+          /* App background + default text */
+          .stApp {{ background: var(--cra-bg); color: var(--cra-text); }}
+          [data-testid="stAppViewContainer"] {{
+            color: var(--cra-text);
+            background:
+              radial-gradient(900px 450px at 12% 10%, rgba(31,156,255,0.18), rgba(0,0,0,0) 60%),
+              radial-gradient(700px 400px at 82% 12%, rgba(57,229,140,0.14), rgba(0,0,0,0) 62%),
+              linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,255,255,0.00));
+          }}
+
+          /* Header title next to logo */
+          .cra-title {{
+            font-size: 2.05rem;
+            font-weight: 950;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            margin: 0.10rem 0 0 0;
+            color: var(--cra-text);
+          }}
+          @media (max-width: 900px) {{
+            .cra-title {{ font-size: 1.65rem; }}
+          }}
+
+          /* Keep Streamlit header visible (contains the sidebar reopen toggle) but minimal */
+          header[data-testid="stHeader"] {{
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            height: 2.6rem;
+            min-height: 2.6rem;
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
             margin: 0 !important;
             padding: 0 !important;
           }}
 
-          /* Remove Streamlit's default top chrome (header + toolbar containers). */
-          header[data-testid="stHeader"],
+          /* Hide most of Streamlit chrome, but don't remove it from layout entirely */
           div[data-testid="stToolbar"],
           div[data-testid="stStatusWidget"],
           div[data-testid="stAppToolbar"] {{
-            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
             height: 0 !important;
             min-height: 0 !important;
             background: transparent !important;
@@ -98,27 +124,40 @@ def _apply_theme(*, mode: str) -> None:
             padding: 0 !important;
           }}
 
-          /* Some Streamlit versions reserve space for the header; remove it. */
-          [data-testid="stAppViewContainer"] > .main {{
-            padding-top: 0 !important;
-            margin-top: 0 !important;
-          }}
-          [data-testid="stAppViewContainer"] > .main > div {{
-            padding-top: 0 !important;
-          }}
-
-          /* App background: subtle gradient + glow */
-          .stApp {{ background: var(--cra-bg); color: var(--cra-text); }}
-          [data-testid="stAppViewContainer"] {{
-            background:
-              radial-gradient(900px 450px at 12% 10%, rgba(31,156,255,0.18), rgba(0,0,0,0) 60%),
-              radial-gradient(700px 400px at 82% 12%, rgba(57,229,140,0.14), rgba(0,0,0,0) 62%),
-              linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,255,255,0.00));
+          /* Ensure the built-in sidebar toggle is visible/clickable in the header */
+          header[data-testid="stHeader"] *[aria-label="Open sidebar"],
+          header[data-testid="stHeader"] *[aria-label="Close sidebar"],
+          header[data-testid="stHeader"] button {{
+            visibility: visible !important;
+            pointer-events: auto !important;
           }}
 
-          /* Ensure readable foreground across common Streamlit text nodes (light AND dark).
-             Keep this scoped to typical rendered text; do NOT blanket-override all div/span.
-             (Broad rules can break BaseWeb widgets.) */
+          /* Make header buttons visible on BOTH light and dark backgrounds */
+          header[data-testid="stHeader"] button {{
+            border-radius: 10px !important;
+            background: color-mix(in srgb, var(--cra-glass) 78%, transparent) !important;
+            border: 1px solid var(--cra-border) !important;
+          }}
+
+          /* Force icon/text inside the header buttons to use theme text color */
+          header[data-testid="stHeader"] button * {{
+            color: var(--cra-text) !important;
+            fill: var(--cra-text) !important;
+          }}
+
+          header[data-testid="stHeader"] button:hover {{
+            background: color-mix(in srgb, var(--cra-glass) 90%, transparent) !important;
+            filter: brightness(1.03);
+          }}
+
+          /* Fallback for browsers without color-mix(): still ensure some contrast */
+          @supports not (background: color-mix(in srgb, white 50%, black)) {{
+            header[data-testid="stHeader"] button {{
+              background: rgba(255, 255, 255, 0.55) !important;
+            }}
+          }}
+
+          /* Readable foreground across common Streamlit text nodes (light AND dark) */
           [data-testid="stAppViewContainer"] p,
           [data-testid="stAppViewContainer"] li,
           [data-testid="stAppViewContainer"] label,
@@ -142,7 +181,7 @@ def _apply_theme(*, mode: str) -> None:
             color: var(--cra-muted) !important;
           }}
 
-          /* Inputs: background + text + placeholder */
+          /* Inputs: background + text + placeholder (BaseWeb widgets) */
           textarea, input,
           .stSelectbox div[data-baseweb="select"],
           .stTextInput div[data-baseweb="input"],
@@ -186,7 +225,7 @@ def _apply_theme(*, mode: str) -> None:
             border-radius: 12px !important;
           }}
 
-          /* Primary button */
+          /* Primary button + hover */
           div.stButton > button {{
             background: linear-gradient(90deg, #1F9CFF 0%, #20D0FF 45%, #39E58C 100%);
             color: #04101C;
@@ -195,16 +234,21 @@ def _apply_theme(*, mode: str) -> None:
             border-radius: 14px;
             padding: 0.55rem 1.05rem;
             box-shadow: 0 10px 26px rgba(0,0,0,0.20);
+            transition: transform 120ms ease, filter 120ms ease, box-shadow 160ms ease;
+            will-change: transform;
           }}
-          div.stButton > button:hover {{ filter: brightness(1.06); transform: translateY(-1px); }}
-          div.stButton > button:active {{ transform: translateY(0px); }}
-
-          /* Avoid extra horizontal separators some Streamlit versions inject */
-          hr {{
-            border: 0 !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
+          div.stButton > button:hover {{
+            filter: brightness(1.08) saturate(1.03);
+            transform: translateY(-2px);
+            box-shadow: 0 14px 34px rgba(0,0,0,0.28);
+          }}
+          div.stButton > button:active {{
+            transform: translateY(0px) scale(0.99);
+            filter: brightness(1.02);
+          }}
+          div.stButton > button:focus-visible {{
+            outline: 3px solid rgba(32, 208, 255, 0.55);
+            outline-offset: 2px;
           }}
 
           /* Sidebar surface */
@@ -218,46 +262,24 @@ def _apply_theme(*, mode: str) -> None:
             -webkit-backdrop-filter: blur(12px);
           }}
 
-          /* GitHub profile mini-card */
-          .cra-profile {{
-            display: flex;
-            gap: 0.6rem;
-            align-items: center;
-          }}
-          .cra-avatar {{
-            width: 44px;
-            height: 44px;
-            border-radius: 999px;
-            border: 1px solid var(--cra-border);
-          }}
-          .cra-profile a {{
-            color: var(--cra-text) !important;
-            text-decoration: none;
-            font-weight: 900;
-          }}
-          .cra-profile a:hover {{
-            text-decoration: underline;
-          }}
-
-          /* Sidebar + main: ensure common widget labels/values are readable.
-             Streamlit widgets are built on BaseWeb; style only text-bearing nodes. */
+          /* Sidebar + main: ensure common widget labels/values are readable */
           [data-testid="stSidebar"] [data-testid="stWidgetLabel"] *,
           [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
-          [data-testid="stSidebar"] .stRadio * ,
-          [data-testid="stSidebar"] .stSelectbox * ,
-          [data-testid="stSidebar"] .stTextInput * ,
-          [data-testid="stSidebar"] .stTextArea * ,
-          [data-testid="stSidebar"] .stToggle * ,
+          [data-testid="stSidebar"] .stRadio *,
+          [data-testid="stSidebar"] .stSelectbox *,
+          [data-testid="stSidebar"] .stTextInput *,
+          [data-testid="stSidebar"] .stTextArea *,
+          [data-testid="stSidebar"] .stToggle *,
           [data-testid="stSidebar"] .stButton * {{
             color: var(--cra-text) !important;
           }}
 
-          /* BaseWeb menu items inside the sidebar (radio/select dropdown options) */
+          /* Sidebar BaseWeb menu items (radio/select options) */
           [data-testid="stSidebar"] div[data-baseweb="menu"] * {{
             color: var(--cra-input-text) !important;
           }}
 
-          /* Metrics in sidebar (rare but safe) */
+          /* Metrics in sidebar */
           [data-testid="stSidebar"] [data-testid="stMetricValue"],
           [data-testid="stSidebar"] [data-testid="stMetricLabel"] {{
             color: var(--cra-text) !important;
@@ -676,6 +698,12 @@ if "theme" not in st.session_state:
 
 _apply_theme(mode=st.session_state["theme"])
 
+# Small helper shown only when sidebar is collapsed (CSS-controlled).
+st.markdown(
+    '<div class="cra-open-sidebar"><span>Use the top-left button to open the sidebar</span></div>',
+    unsafe_allow_html=True,
+)
+
 # Header
 col_logo, col_title, col_user = st.columns([1, 6, 3], vertical_alignment="center")
 with col_logo:
@@ -717,9 +745,7 @@ with st.sidebar:
         st.markdown('<div class="cra-card">', unsafe_allow_html=True)
         st.markdown('<div class="cra-card-title">Profile</div>', unsafe_allow_html=True)
         avatar_html = (
-            f'<img class="cra-avatar" src="{GITHUB_AVATAR_URL}" alt="GitHub avatar" />'
-            if GITHUB_AVATAR_URL
-            else ""
+            f'<img class="cra-avatar" src="{GITHUB_AVATAR_URL}" alt="GitHub avatar" />' if GITHUB_AVATAR_URL else ""
         )
         name = GITHUB_USERNAME or "GitHub"
         st.markdown(

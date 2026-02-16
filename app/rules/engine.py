@@ -32,4 +32,3 @@ def run_custom_rules(
         issues.extend(r.run(ctx))
 
     return issues
-

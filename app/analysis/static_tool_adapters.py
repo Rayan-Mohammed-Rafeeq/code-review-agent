@@ -65,4 +65,3 @@ def issues_from_bandit(*, bandit: dict[str, Any], filename: str) -> list[Issue]:
             )
         )
     return out
-

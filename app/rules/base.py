@@ -45,4 +45,3 @@ def issue(
         source="custom_rules",
         code=rule_id,
     )
-
