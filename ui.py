@@ -10,6 +10,17 @@ st.set_page_config(page_title="Code Review Agent", layout="wide")
 # --- Branding / Theme ---
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 
+# Optional: GitHub profile shown in sidebar (no auth required)
+GITHUB_USERNAME = (os.environ.get("GITHUB_USERNAME") or "").strip()
+GITHUB_PROFILE_URL = (os.environ.get("GITHUB_PROFILE_URL") or "").strip()
+GITHUB_AVATAR_URL = (os.environ.get("GITHUB_AVATAR_URL") or "").strip()
+
+if not GITHUB_PROFILE_URL and GITHUB_USERNAME:
+    GITHUB_PROFILE_URL = f"https://github.com/{GITHUB_USERNAME}"
+if not GITHUB_AVATAR_URL and GITHUB_USERNAME:
+    # Public avatar endpoint; no token required.
+    GITHUB_AVATAR_URL = f"https://github.com/{GITHUB_USERNAME}.png"
+
 
 def _apply_theme(*, mode: str) -> None:
     # Minimal CSS overrides. Streamlit theming is limited, so we style only core surfaces.
@@ -62,27 +73,14 @@ def _apply_theme(*, mode: str) -> None:
           }}
 
           /* Remove ONLY the decorative rounded gradient bar at the very top.
-             Streamlit 1.53.1 renders it as stDecoration or via a ::before pseudo-element. */
-          div[data-testid="stDecoration"],
-          div[data-testid="stDecoration"] * {{
+             Streamlit renders it as stDecoration or via a ::before pseudo-element.
+             Keep this narrow to avoid accidentally hiding layout containers (including the sidebar). */
+          div[data-testid="stDecoration"] {{
             display: none !important;
             height: 0 !important;
             min-height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: transparent !important;
-            border: 0 !important;
-            box-shadow: none !important;
-          }}
-
-          [data-testid="stAppViewContainer"]::before,
-          [data-testid="stAppViewContainer"] > div::before,
-          body::before {{
-            content: none !important;
-            display: none !important;
-            height: 0 !important;
-            background: transparent !important;
-            box-shadow: none !important;
           }}
 
           /* Remove Streamlit's default top chrome (header + toolbar containers). */
@@ -118,114 +116,31 @@ def _apply_theme(*, mode: str) -> None:
               linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,255,255,0.00));
           }}
 
-          /* Avoid extra horizontal separators some Streamlit versions inject */
-          hr {{
-            border: 0 !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
+          /* Ensure readable foreground across common Streamlit text nodes (light AND dark).
+             Keep this scoped to typical rendered text; do NOT blanket-override all div/span.
+             (Broad rules can break BaseWeb widgets.) */
+          [data-testid="stAppViewContainer"] p,
+          [data-testid="stAppViewContainer"] li,
+          [data-testid="stAppViewContainer"] label,
+          [data-testid="stAppViewContainer"] small,
+          [data-testid="stSidebar"] p,
+          [data-testid="stSidebar"] li,
+          [data-testid="stSidebar"] label,
+          [data-testid="stSidebar"] small,
+          [data-testid="stMarkdownContainer"] p,
+          [data-testid="stMarkdownContainer"] li,
+          [data-testid="stMarkdownContainer"] span,
+          [data-testid="stMarkdownContainer"] strong,
+          [data-testid="stMarkdownContainer"] em {{
+            color: var(--cra-text) !important;
           }}
 
-          /* Make default blocks breathe a bit */
-          main .block-container {{
-            padding-top: 1.1rem;
-            padding-bottom: 3rem;
-            max-width: 1200px;
+          /* Captions */
+          [data-testid="stCaptionContainer"],
+          .stCaption,
+          .stMarkdown small {{
+            color: var(--cra-muted) !important;
           }}
-
-          /* Title + subtitle */
-          .cra-title {{
-            font-size: 2.1rem;
-            font-weight: 900;
-            letter-spacing: 0.2px;
-            color: var(--cra-text);
-            margin: 0;
-            line-height: 1.05;
-            text-shadow: 0 0 18px var(--cra-glow);
-          }}
-          .cra-subtitle {{
-            color: var(--cra-muted);
-            margin-top: 0.35rem;
-            margin-bottom: 0.25rem;
-          }}
-
-          /* Glass utility containers */
-          .cra-card {{
-            background: var(--cra-glass);
-            border: 1px solid var(--cra-border);
-            border-radius: var(--cra-radius);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.16);
-            padding: 0.95rem 1.05rem;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-          }}
-          .cra-card + .cra-card {{ margin-top: 0.8rem; }}
-          .cra-card-title {{
-            font-weight: 900;
-            letter-spacing: 0.25px;
-            margin: 0 0 0.55rem 0;
-          }}
-
-    
-          .cra-chip {{
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            padding: 0.20rem 0.55rem;
-            border-radius: 999px;
-            border: 1px solid var(--cra-border);
-            background: var(--cra-glass2);
-            color: var(--cra-text);
-            font-size: 0.82rem;
-            font-weight: 800;
-            white-space: nowrap;
-          }}
-          .cra-dot {{
-            width: 8px;
-            height: 8px;
-            border-radius: 999px;
-            background: rgba(160,160,160,0.65);
-            box-shadow: 0 0 12px rgba(160,160,160,0.25);
-          }}
-          .cra-dot-ok {{ background: #39E58C; box-shadow: 0 0 14px rgba(57,229,140,0.35); }}
-          .cra-dot-bad {{ background: #FF4D6D; box-shadow: 0 0 14px rgba(255,77,109,0.35); }}
-          .cra-dot-warn {{ background: #FFD166; box-shadow: 0 0 14px rgba(255,209,102,0.35); }}
-
-          /* Sidebar surface */
-          section[data-testid="stSidebar"] {{
-            background: {sidebar_bg};
-            border-right: 1px solid var(--cra-border);
-          }}
-          section[data-testid="stSidebar"] > div {{
-            background: var(--cra-glass);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-          }}
-
-          /* Force readable foreground colors across common text nodes.
-             IMPORTANT: keep this scoped; overly-broad rules can break BaseWeb/Streamlit widgets
-             (e.g., selectbox selected value text in light mode). */
-          html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {{
-            color: var(--cra-text);
-          }}
-          p, li, small {{ color: var(--cra-text); }}
-          [data-testid="stCaptionContainer"], .stCaption, .stMarkdown small {{ color: var(--cra-muted) !important; }}
-
-          /* Tabs + expanders */
-          [data-testid="stTabs"] button {{ color: var(--cra-text) !important; }}
-          [data-testid="stTabs"] [role="tablist"] {{
-            border-radius: 999px;
-            background: var(--cra-glass2);
-            padding: 0.2rem;
-            border: 1px solid var(--cra-border);
-            box-shadow: none;
-          }}
-          [data-testid="stExpander"] {{
-            border-radius: var(--cra-radius);
-            border: 1px solid var(--cra-border);
-            background: var(--cra-glass2);
-          }}
-          [data-testid="stExpander"] summary, [data-testid="stExpander"] summary span {{ color: var(--cra-text) !important; }}
 
           /* Inputs: background + text + placeholder */
           textarea, input,
@@ -238,10 +153,11 @@ def _apply_theme(*, mode: str) -> None:
             border: 1px solid var(--cra-border) !important;
             box-shadow: 0 0 0 0 rgba(0,0,0,0) !important;
           }}
-          textarea::placeholder, input::placeholder {{ color: var(--cra-placeholder) !important; }}
+          textarea::placeholder, input::placeholder {{
+            color: var(--cra-placeholder) !important;
+          }}
 
-          /* BaseWeb select internals: set the selected value + placeholder explicitly.
-             Streamlit uses BaseWeb; classnames are hashed, so we use "contains" selectors. */
+          /* BaseWeb select internals: selected value + placeholder */
           .stSelectbox div[data-baseweb="select"] [class*="SingleValue"],
           .stSelectbox div[data-baseweb="select"] [class*="ValueContainer"],
           .stSelectbox div[data-baseweb="select"] [class*="Input"],
@@ -270,9 +186,6 @@ def _apply_theme(*, mode: str) -> None:
             border-radius: 12px !important;
           }}
 
-          /* Metrics */
-          [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{ color: var(--cra-text) !important; }}
-
           /* Primary button */
           div.stButton > button {{
             background: linear-gradient(90deg, #1F9CFF 0%, #20D0FF 45%, #39E58C 100%);
@@ -286,10 +199,68 @@ def _apply_theme(*, mode: str) -> None:
           div.stButton > button:hover {{ filter: brightness(1.06); transform: translateY(-1px); }}
           div.stButton > button:active {{ transform: translateY(0px); }}
 
-          /* Respect reduced motion */
-          @media (prefers-reduced-motion: reduce) {{
-            * {{ transition: none !important; animation: none !important; }}
-            div.stButton > button:hover {{ transform: none !important; }}
+          /* Avoid extra horizontal separators some Streamlit versions inject */
+          hr {{
+            border: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }}
+
+          /* Sidebar surface */
+          section[data-testid="stSidebar"] {{
+            background: {sidebar_bg};
+            border-right: 1px solid var(--cra-border);
+          }}
+          section[data-testid="stSidebar"] > div {{
+            background: var(--cra-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+          }}
+
+          /* GitHub profile mini-card */
+          .cra-profile {{
+            display: flex;
+            gap: 0.6rem;
+            align-items: center;
+          }}
+          .cra-avatar {{
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+            border: 1px solid var(--cra-border);
+          }}
+          .cra-profile a {{
+            color: var(--cra-text) !important;
+            text-decoration: none;
+            font-weight: 900;
+          }}
+          .cra-profile a:hover {{
+            text-decoration: underline;
+          }}
+
+          /* Sidebar + main: ensure common widget labels/values are readable.
+             Streamlit widgets are built on BaseWeb; style only text-bearing nodes. */
+          [data-testid="stSidebar"] [data-testid="stWidgetLabel"] *,
+          [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+          [data-testid="stSidebar"] .stRadio * ,
+          [data-testid="stSidebar"] .stSelectbox * ,
+          [data-testid="stSidebar"] .stTextInput * ,
+          [data-testid="stSidebar"] .stTextArea * ,
+          [data-testid="stSidebar"] .stToggle * ,
+          [data-testid="stSidebar"] .stButton * {{
+            color: var(--cra-text) !important;
+          }}
+
+          /* BaseWeb menu items inside the sidebar (radio/select dropdown options) */
+          [data-testid="stSidebar"] div[data-baseweb="menu"] * {{
+            color: var(--cra-input-text) !important;
+          }}
+
+          /* Metrics in sidebar (rare but safe) */
+          [data-testid="stSidebar"] [data-testid="stMetricValue"],
+          [data-testid="stSidebar"] [data-testid="stMetricLabel"] {{
+            color: var(--cra-text) !important;
           }}
         </style>
         """,
@@ -741,6 +712,23 @@ with col_user:
 
 # --- Sidebar: navigation + auth + settings ---
 with st.sidebar:
+    # Optional GitHub profile card (shows in deployed app too)
+    if GITHUB_PROFILE_URL and (GITHUB_USERNAME or GITHUB_AVATAR_URL):
+        st.markdown('<div class="cra-card">', unsafe_allow_html=True)
+        st.markdown('<div class="cra-card-title">Profile</div>', unsafe_allow_html=True)
+        avatar_html = (
+            f'<img class="cra-avatar" src="{GITHUB_AVATAR_URL}" alt="GitHub avatar" />'
+            if GITHUB_AVATAR_URL
+            else ""
+        )
+        name = GITHUB_USERNAME or "GitHub"
+        st.markdown(
+            f'<div class="cra-profile">{avatar_html}<div><a href="{GITHUB_PROFILE_URL}" target="_blank">{name}</a>'
+            f'<div style="color:var(--cra-muted); font-size:0.85rem;">{GITHUB_PROFILE_URL}</div></div></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown('<div class="cra-card">', unsafe_allow_html=True)
     st.markdown('<div class="cra-card-title">Workspace</div>', unsafe_allow_html=True)
     page = st.radio("Navigate", ["Review"], label_visibility="collapsed")
@@ -781,8 +769,6 @@ with st.sidebar:
         st.success(f"Status: {msg}")
         if isinstance(payload, dict):
             st.caption(f"Service: {payload.get('service', 'unknown')} | Version: {payload.get('version', 'unknown')}")
-            if payload.get("firebase_configured") is not None:
-                st.caption(f"Firebase verify configured: {'yes' if payload.get('firebase_configured') else 'no'}")
         cfg = _get_configz(API_BASE_URL)
         if cfg:
             st.caption(f"LLM configured: {'yes' if cfg.get('llm_api_key_set') else 'no'}")
