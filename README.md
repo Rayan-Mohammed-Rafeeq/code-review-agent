@@ -59,13 +59,20 @@ pip install -r requirements.txt
 
 ### 2) Configure the LLM (optional)
 
-If you want LLM-backed reviews, configure these environment variables (or create a `.env` file in the repo root):
+If you want LLM-backed reviews, configure an API key via environment variables (or create a `.env` file in the repo root):
 - `LLM_API_KEY`
-- `LLM_BASE_URL` (example: `https://api.openai.com/v1`)
-- `LLM_MODEL` (example: `gpt-4o-mini`)
+
+Defaults (override if you want):
+- `LLM_BASE_URL` defaults to `https://openrouter.ai/api/v1`
+- `LLM_MODEL` defaults to `qwen/qwen3-coder:free`
+
+Optional (OpenRouter attribution headers):
+- `OPENROUTER_SITE_URL` (becomes `HTTP-Referer`)
+- `OPENROUTER_APP_TITLE` (becomes `X-Title`)
 
 Security note:
-- Never commit `.env` or Firebase service-account JSON keys. Use `.env.example` as a template.
+- Never commit `.env` or Firebase service-account JSON keys.
+- `.env.example` contains **placeholders only**. Copy it to `.env` and fill real values locally.
 
 ### 3) Run the API
 
@@ -215,7 +222,11 @@ run_tests.bat
 
 ### 400: “LLM is not configured (missing: …)”
 
-Set `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`, then restart the API.
+Set `LLM_API_KEY` and restart the API.
+
+Optional overrides:
+- `LLM_BASE_URL`
+- `LLM_MODEL`
 
 If you intended to run without an LLM, set:
 - `LLM_PROVIDER=none`

@@ -65,8 +65,10 @@ def test_post_review_returns_ranked_issues(monkeypatch):
 
 
 def test_post_review_missing_llm_config_returns_400(client):
+    # Use an explicit empty string to ensure Settings reads the missing key even if Pydantic cached env.
     os.environ["LLM_PROVIDER"] = "openai"
-    os.environ.pop("LLM_API_KEY", None)
+    os.environ["LLM_API_KEY"] = ""
+    # Base URL and model now have defaults, but ensure any inherited env doesn't mask the missing-key case.
     os.environ.pop("LLM_BASE_URL", None)
     os.environ.pop("LLM_MODEL", None)
 
@@ -76,6 +78,7 @@ def test_post_review_missing_llm_config_returns_400(client):
     )
     assert r.status_code == 400
     assert "LLM is not configured" in r.text
+    assert "LLM_API_KEY" in r.text
 
 
 def test_post_review_offline_mode_succeeds_without_llm_config(client):
@@ -151,3 +154,48 @@ def test_post_review_strict_mode_returns_formatted_findings(monkeypatch):
 
     # Trailing newline (useful for CLI copy/paste friendliness).
     assert text.endswith("\n")
+
+
+def test_post_review_non_python_language_offline_mode_succeeds(client):
+    os.environ["LLM_PROVIDER"] = "none"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
+
+    r = client.post(
+        "/review",
+        json={"code": "console.log('hi')\n", "language": "javascript", "filename": "x.js", "strict": False},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "issues" in body
+    assert isinstance(body["issues"], list)
+    assert "static_analysis" in body
+    static = body["static_analysis"]
+    assert isinstance(static, dict)
+    # For non-python, python-only tools should be skipped.
+    assert (static.get("flake8") or {}).get("skipped") is True
+    assert (static.get("bandit") or {}).get("skipped") is True
+
+
+def test_post_review_v2_non_python_language_offline_mode_succeeds(client):
+    os.environ["LLM_PROVIDER"] = "none"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
+
+    r = client.post(
+        "/v2/review/file?strict=false",
+        json={"code": "console.log('hi')\n", "language": "javascript", "filename": "x.js"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "issues" in body and isinstance(body["issues"], list)
+    assert "score" in body and isinstance(body["score"], dict)
+    assert "score" in body["score"]
+    assert "counts_by_severity" in body["score"]
+    assert "static_analysis" in body and isinstance(body["static_analysis"], dict)
+    static = body["static_analysis"]
+    assert (static.get("flake8") or {}).get("skipped") is True
+    assert (static.get("bandit") or {}).get("skipped") is True
+

@@ -20,6 +20,8 @@ async def review_file_v2(
             filename=payload.filename,
             code=payload.code,
             strict=bool(strict),
+            language=getattr(payload, "language", "python"),
+            enabled_checks=getattr(payload, "enabled_checks", None),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

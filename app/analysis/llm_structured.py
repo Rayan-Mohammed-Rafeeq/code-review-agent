@@ -12,6 +12,7 @@ class LLMIssue(BaseModel):
     category: Category
     severity: Severity
     description: str = Field(min_length=1)
+    impact: str = Field(default="", description="Impact statement; may be omitted by some models")
     suggestion: str = Field(min_length=1)
 
 
@@ -20,10 +21,21 @@ class LLMResponse(BaseModel):
 
 
 def build_llm_instructions(*, strict: bool) -> str:
+    # Keep it short but unambiguous; models follow this better than long prose.
+    schema = (
+        '{"issues":[{'
+        '"line":int,'
+        '"category":"bug|security|performance|maintainability|style",'
+        '"severity":"critical|high|medium|low|info",'
+        '"description":string,'
+        '"impact":string,'
+        '"suggestion":string'
+        '}]} '
+    )
     return (
-        "Return JSON only. No markdown, no code fences, no extra keys. "
-        'Schema: {"issues":[{"line":int,"category":"bug|performance|security|style",'
-        '"severity":"critical|high|medium|low|info","description":str,"suggestion":str}]} '
+        "Return STRICT JSON only (no markdown, no code fences, no extra keys). "
+        "Format: "
+        + schema
         + ("Be strict and exhaustive." if strict else "Prioritize high-signal issues.")
     )
 
@@ -43,6 +55,7 @@ def parse_llm_json(*, text: str) -> LLMResponse:
 def llm_response_to_issues(*, resp: LLMResponse, filename: str) -> list[Issue]:
     out: list[Issue] = []
     for it in resp.issues:
+        md = {"impact": it.impact} if (it.impact or "").strip() else {}
         out.append(
             Issue(
                 file=filename,
@@ -52,6 +65,7 @@ def llm_response_to_issues(*, resp: LLMResponse, filename: str) -> list[Issue]:
                 description=it.description,
                 suggestion=it.suggestion,
                 source="llm",
+                metadata=md,
             )
         )
     return out

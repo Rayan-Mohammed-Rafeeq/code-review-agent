@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM Code Review Agent - Full Application Starter
-REM Starts both backend and frontend automatically
+REM Starts backend + React frontend dev server
 REM ============================================================
 
 setlocal enabledelayedexpansion
@@ -57,14 +57,14 @@ timeout /t 3 /nobreak
 
 echo.
 echo ============================================================
-echo Starting Frontend Interface...
+echo Starting React Frontend (Vite)...
 echo ============================================================
 echo.
-echo Frontend will run on: http://localhost:8501
+echo Frontend will run on: http://localhost:8080
 echo.
 
 REM Start frontend in a new window (inherits env from this script)
-start "Code Review Agent - Frontend" cmd /k "streamlit run ui.py"
+start "Code Review Agent - Frontend" cmd /k "cd /d %~dp0frontend && pnpm dev"
 
 REM Wait a bit for frontend to start
 timeout /t 2 /nobreak
@@ -75,14 +75,14 @@ echo SUCCESS! Application is Starting
 echo ============================================================
 echo.
 echo BACKEND:  http://127.0.0.1:8000
-echo FRONTEND: http://localhost:8501
+echo FRONTEND: http://localhost:8080
 echo API DOCS: http://127.0.0.1:8000/docs
 echo.
 echo Two windows should have opened:
 echo 1. Backend Server (FastAPI)
-echo 2. Frontend UI (Streamlit)
+echo 2. Frontend Dev Server (Vite)
 echo.
-echo Open your browser to: http://localhost:8501
+echo Open your browser to: http://localhost:8080
 echo.
 echo To stop:
 echo - Close both windows

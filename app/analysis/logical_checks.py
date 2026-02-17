@@ -400,4 +400,59 @@ def run_logical_checks(*, code: str, filename: str, strict: bool) -> list[Issue]
 
     _InvertedPredicate().visit(tree)
 
+    # 9) Potential ZeroDivisionError: division by len(x) without any evident empty-check.
+    # Heuristic: flag `... / len(name)` when the same name isn't guarded by `if name` / `if len(name)`.
+    class _DivByLen(ast.NodeVisitor):
+        def __init__(self):
+            self.guarded: set[str] = set()
+
+        def visit_If(self, node: ast.If):
+            # Track simple guards like: `if numbers:` or `if len(numbers) > 0:`
+            name = None
+            t = node.test
+            if isinstance(t, ast.Name):
+                name = t.id
+            elif isinstance(t, ast.UnaryOp) and isinstance(t.op, ast.Not) and isinstance(t.operand, ast.Name):
+                name = t.operand.id
+            elif isinstance(t, ast.Call) and isinstance(t.func, ast.Name) and t.func.id == "len" and len(t.args) == 1:
+                a0 = t.args[0]
+                if isinstance(a0, ast.Name):
+                    name = a0.id
+            elif isinstance(t, ast.Compare):
+                left = t.left
+                if (
+                    isinstance(left, ast.Call)
+                    and isinstance(left.func, ast.Name)
+                    and left.func.id == "len"
+                    and len(left.args) == 1
+                ):
+                    a0 = left.args[0]
+                    if isinstance(a0, ast.Name):
+                        name = a0.id
+            if name:
+                self.guarded.add(name)
+            self.generic_visit(node)
+
+        def visit_BinOp(self, node: ast.BinOp):
+            if isinstance(node.op, (ast.Div, ast.FloorDiv)):
+                r = node.right
+                if isinstance(r, ast.Call) and isinstance(r.func, ast.Name) and r.func.id == "len" and len(r.args) == 1:
+                    a0 = r.args[0]
+                    if isinstance(a0, ast.Name):
+                        var = a0.id
+                        if var not in self.guarded:
+                            issues.append(
+                                _mk_issue(
+                                    filename=filename,
+                                    line=getattr(node, "lineno", 1),
+                                    severity=Severity.high if strict else Severity.medium,
+                                    desc=f"Potential ZeroDivisionError: dividing by len({var}) without handling empty input.",
+                                    sugg=f"Validate input before dividing (e.g., `if not {var}: ...`) or raise a clear exception.",
+                                    code="L700-div-by-len",
+                                )
+                            )
+            self.generic_visit(node)
+
+    _DivByLen().visit(tree)
+
     return issues

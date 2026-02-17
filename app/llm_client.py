@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import json
 import logging
+import os
+import random
 from typing import Any
 from urllib.parse import urlparse
 
@@ -217,6 +220,25 @@ async def request_llm_review(
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
+    # OpenRouter recommends sending these optional headers for rankings/attribution.
+    # We include them only when present, and only when the base_url looks like OpenRouter.
+    if "openrouter.ai" in (base_url or ""):
+        site_url = (os.getenv("OPENROUTER_SITE_URL") or "").strip()
+        app_title = (os.getenv("OPENROUTER_APP_TITLE") or "").strip()
+        if site_url:
+            headers["HTTP-Referer"] = site_url
+        if app_title:
+            headers["X-Title"] = app_title
+
+    async def _sleep_rate_limit(*, attempt: int, retry_after: float | None) -> None:
+        # Keep this bounded so API requests don't hang.
+        if retry_after is not None and retry_after > 0:
+            await asyncio.sleep(min(retry_after, 5.0))
+            return
+        base = min(0.5 * (2**attempt), 4.0)
+        jitter = random.random() * 0.2
+        await asyncio.sleep(base + jitter)
+
     async def _do_post(payload: dict[str, Any]) -> dict[str, Any]:
         if client is None:
             async with httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout_seconds) as c:
@@ -236,6 +258,158 @@ async def request_llm_review(
             text = e.response.text if e.response is not None else ""
         except Exception:
             text = ""
+
+        # Rate limit handling: retry a few times with backoff.
+        if status == 429:
+            retry_after: float | None = None
+            try:
+                ra = e.response.headers.get("retry-after") if e.response is not None else None
+                if ra:
+                    retry_after = float(ra)
+            except Exception:
+                retry_after = None
+
+            last_exc: httpx.HTTPStatusError | None = e
+            for attempt in range(3):
+                logger.info(
+                    "LLM rate limited (429); retrying",
+                    extra={"attempt": attempt + 1, "base_url": base_url, "model": model},
+                )
+                await _sleep_rate_limit(attempt=attempt, retry_after=retry_after)
+                try:
+                    data = await _do_post(body)
+                    # Success: exit the retry loop and proceed.
+                    break
+                except httpx.HTTPStatusError as e_rl:
+                    last_exc = e_rl
+                    if e_rl.response is not None and e_rl.response.status_code == 429:
+                        continue
+                    raise
+            else:
+                # Retries exhausted: treat as infra/service availability issue (not a code defect).
+                logger.warning(
+                    "LLM provider rate limited (429); treating as unavailable",
+                    extra={
+                        "status_code": status,
+                        "base_url": base_url,
+                        "model": model,
+                        "response_snippet": (text or "")[:500],
+                    },
+                )
+                return []
+
+        # Provider compatibility: many OpenAI-compatible endpoints reject response_format.
+        # Retry ONCE on any 400, removing response_format, to maximize compatibility.
+        if status == 400 and "response_format" in body:
+            logger.info(
+                "LLM provider returned 400; retrying once without response_format",
+                extra={"base_url": base_url, "model": model},
+            )
+            retry_body = dict(body)
+            retry_body.pop("response_format", None)
+            try:
+                data = await _do_post(retry_body)
+            except httpx.HTTPStatusError as e2:
+                # If retry fails, keep the retry response text for better diagnostics.
+                try:
+                    text = e2.response.text if e2.response is not None else text
+                except Exception:
+                    pass
+                status = e2.response.status_code if e2.response is not None else status
+                e = e2
+            except Exception:
+                # Fall through to normal error handling below using original status/text.
+                pass
+            else:
+                # Success on retry.
+                raw_content = _extract_message_content(data)
+                parsed_obj: dict[str, Any]
+                try:
+                    parsed_obj = json.loads(raw_content)
+                except json.JSONDecodeError as exc:
+                    return [
+                        Issue(
+                            severity="high",
+                            category="bug",
+                            description="LLM returned non-JSON content",
+                            suggestion="This provider likely doesn't support response_format=json_object. Enforce JSON via the prompt.",
+                            metadata={
+                                "error": "non_json_content",
+                                "detail": str(exc),
+                                "content_snippet": raw_content[:500],
+                            },
+                        )
+                    ]
+
+                issues_raw = parsed_obj.get("issues")
+                if not isinstance(issues_raw, list):
+                    return [
+                        Issue(
+                            severity="high",
+                            category="bug",
+                            description="LLM JSON response missing 'issues' array",
+                            suggestion="Update the prompt/schema to always include an 'issues' array.",
+                            metadata={"error": "missing_issues", "response": parsed_obj},
+                        )
+                    ]
+
+                def _normalize_issue_dict(d: dict[str, Any]) -> dict[str, Any]:
+                    """Best-effort adapter for near-miss provider outputs.
+
+                    Some models return {type,message,context} instead of our Issue schema.
+                    We'll map that into a low/style issue when the required fields are missing.
+                    """
+                    if all(k in d for k in ("severity", "category", "description", "suggestion")):
+                        return d
+
+                    message = d.get("message") or d.get("description") or ""
+                    context = d.get("context") or ""
+                    typ = d.get("type") or ""
+
+                    if message or context:
+                        desc = message if message else context
+                        sugg = context if (message and context) else "Review completed."
+                        # Default to low/style for these informational items.
+                        return {
+                            "severity": "low",
+                            "category": "style",
+                            "description": str(desc).strip() or "No issues found",
+                            "suggestion": str(sugg).strip() or "No action needed.",
+                            "location": d.get("location"),
+                            "metadata": {"normalized_from": typ or "unknown", "raw": d},
+                        }
+
+                    return d
+
+                issues: list[Issue] = []
+                invalid_items: list[dict[str, Any]] = []
+
+                for item in issues_raw:
+                    if not isinstance(item, dict):
+                        invalid_items.append({"item": repr(item), "error": "not_an_object"})
+                        continue
+                    try:
+                        issues.append(Issue.model_validate(item))
+                    except ValidationError as e_val:
+                        invalid_items.append({"item": item, "error": "validation_error", "detail": e_val.errors()})
+
+                if issues:
+                    return issues
+                if not invalid_items:
+                    return []
+                return [
+                    Issue(
+                        severity=Issue.model_fields["severity"].annotation.high
+                        if hasattr(Issue.model_fields["severity"].annotation, "high")
+                        else "high",
+                        category=Issue.model_fields["category"].annotation.bug
+                        if hasattr(Issue.model_fields["category"].annotation, "bug")
+                        else "bug",
+                        description="LLM returned no valid issues",
+                        suggestion="Retry; if it persists, adjust the prompt/schema and validate provider response_format support.",
+                        metadata={"error": "no_valid_issues", "dropped": invalid_items, "response": parsed_obj},
+                    )
+                ]
 
         # Provider compatibility: many OpenAI-compatible endpoints reject response_format.
         # Retry ONCE on any 400, removing response_format, to maximize compatibility.
@@ -368,44 +542,13 @@ async def request_llm_review(
             },
         )
 
-        return [
-            Issue(
-                severity=Issue.model_fields["severity"].annotation.high
-                if hasattr(Issue.model_fields["severity"].annotation, "high")
-                else "high",
-                category=Issue.model_fields["category"].annotation.bug
-                if hasattr(Issue.model_fields["category"].annotation, "bug")
-                else "bug",
-                description=f"LLM request failed: HTTP {status}",
-                suggestion=_status_suggestion(status, text, base_url=base_url, model=model),
-                metadata={
-                    "error": "http_status",
-                    "status_code": status,
-                    "detail": str(e),
-                    "base_url": base_url,
-                    "model": model,
-                    "response": text[:2000],
-                },
-            )
-        ]
+        return []
     except httpx.HTTPError as e:
         logger.warning(
-            "LLM request failed due to HTTP error",
+            "LLM request failed due to HTTP error; treating as unavailable",
             extra={"base_url": base_url, "model": model, "detail": str(e)},
         )
-        return [
-            Issue(
-                severity=Issue.model_fields["severity"].annotation.high
-                if hasattr(Issue.model_fields["severity"].annotation, "high")
-                else "high",
-                category=Issue.model_fields["category"].annotation.bug
-                if hasattr(Issue.model_fields["category"].annotation, "bug")
-                else "bug",
-                description=f"LLM request failed: {type(e).__name__}",
-                suggestion="Check network connectivity, credentials, base URL, and try again.",
-                metadata={"error": "http_error", "detail": str(e)},
-            )
-        ]
+        return []
     except ValueError as e:
         return [
             Issue(

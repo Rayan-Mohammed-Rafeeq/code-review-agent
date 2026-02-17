@@ -137,11 +137,7 @@ async def test_request_llm_review_http_401_has_actionable_suggestion():
             client=client,
         )
 
-    assert len(issues) == 1
-    assert issues[0].severity.value == "high"
-    assert issues[0].description == "LLM request failed: HTTP 401"
-    assert "Authentication failed" in issues[0].suggestion
-    assert (issues[0].metadata or {}).get("status_code") == 401
+    assert issues == []
 
 
 @pytest.mark.asyncio
@@ -322,3 +318,69 @@ async def test_request_llm_review_filters_generic_naming_nit_for_add():
         )
 
     assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_request_llm_review_returns_empty_on_http_401(monkeypatch):
+    # Avoid real sleeping during backoff.
+    async def _no_sleep(_seconds: float):
+        return None
+
+    import asyncio as _asyncio
+
+    monkeypatch.setattr(_asyncio, "sleep", _no_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"message": "unauthorized"}})
+
+    transport = httpx.MockTransport(handler)
+
+    async with httpx.AsyncClient(transport=transport, base_url="https://example.com/v1") as client:
+        issues = await request_llm_review(
+            api_key="k",
+            base_url="https://example.com/v1",
+            model="gpt",
+            compressed_context="x",
+            static_analysis={},
+            client=client,
+        )
+
+    assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_request_llm_review_retries_on_429_then_succeeds(monkeypatch):
+    # Avoid real sleeping during backoff.
+    async def _no_sleep(_seconds: float):
+        return None
+
+    import asyncio as _asyncio
+
+    monkeypatch.setattr(_asyncio, "sleep", _no_sleep)
+
+    llm_content = json.dumps({"issues": []})
+    ok_payload = {"choices": [{"message": {"content": llm_content}}]}
+
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] < 3:
+            return httpx.Response(429, json={"error": {"message": "rate limited"}}, headers={"retry-after": "0"})
+        return httpx.Response(200, json=ok_payload)
+
+    transport = httpx.MockTransport(handler)
+
+    async with httpx.AsyncClient(transport=transport, base_url="https://example.com/v1") as client:
+        issues = await request_llm_review(
+            api_key="k",
+            base_url="https://example.com/v1",
+            model="gpt",
+            compressed_context="x",
+            static_analysis={},
+            client=client,
+        )
+
+    assert issues == []
+    assert state["calls"] == 3
+

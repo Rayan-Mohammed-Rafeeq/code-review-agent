@@ -18,12 +18,19 @@ class Settings(BaseSettings):
     # - SCALEDOWN_API_KEY (optional; enables prompt compression via ScaleDown)
     llm_provider: str = Field(default="openai", validation_alias="LLM_PROVIDER")
     llm_api_key: str = Field(default="", validation_alias="LLM_API_KEY")
-    # Intentionally default these to empty so the API can clearly detect
-    # misconfiguration and return a helpful 400 until the user sets env vars.
-    llm_base_url: str = Field(default="", validation_alias="LLM_BASE_URL")
-    llm_model: str = Field(default="", validation_alias="LLM_MODEL")
+
+    # Defaults are chosen to be immediately usable with OpenRouter. Users can override via env vars.
+    # OpenRouter is OpenAI-compatible at /v1/chat/completions.
+    llm_base_url: str = Field(default="https://openrouter.ai/api/v1", validation_alias="LLM_BASE_URL")
+    llm_model: str = Field(default="qwen/qwen3-coder:free", validation_alias="LLM_MODEL")
+
     llm_timeout_seconds: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_SECONDS")
     scaledown_api_key: str = Field(default="", validation_alias="SCALEDOWN_API_KEY")
+
+    # Optional OpenRouter metadata headers (recommended by OpenRouter for rankings/attribution)
+    # These are safe (non-secret) and optional.
+    openrouter_site_url: str = Field(default="", validation_alias="OPENROUTER_SITE_URL")
+    openrouter_app_title: str = Field(default="", validation_alias="OPENROUTER_APP_TITLE")
 
     def model_post_init(self, __context):  # type: ignore[override]
         # Back-compat guard: older configs used LLM_PROVIDER=scaledown, but ScaleDown is not an LLM.

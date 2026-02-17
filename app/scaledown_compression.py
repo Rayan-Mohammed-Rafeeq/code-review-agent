@@ -7,7 +7,8 @@ Public API:
 
 Behavior:
 - Reads SCALEDOWN_API_KEY from environment.
-- If missing/empty, returns (prompt, False).
+- Optional toggle: SCALEDOWN_ENABLED (true/false). If set false, always no-op.
+- If API key missing/empty, returns (prompt, False).
 - On any ScaleDown failure, returns (prompt, False).
 """
 
@@ -24,6 +25,15 @@ _SCALEDOWN_URL = "https://api.scaledown.xyz/compress/raw/"
 _TIMEOUT_SECONDS = 10.0
 
 
+def _env_truthy(val: str | None) -> bool:
+    v = (val or "").strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "no", "n", "off"}:
+        return False
+    return False
+
+
 def compress_with_scaledown(prompt: str) -> tuple[str, bool]:
     """Compress the given prompt using ScaleDown.
 
@@ -32,8 +42,12 @@ def compress_with_scaledown(prompt: str) -> tuple[str, bool]:
 
     Returns:
         (compressed_prompt, True) on success
-        (original_prompt, False) on any failure or if API key is missing
+        (original_prompt, False) on any failure or if disabled / API key is missing
     """
+    enabled_raw = os.getenv("SCALEDOWN_ENABLED")
+    if enabled_raw is not None and not _env_truthy(enabled_raw):
+        return prompt, False
+
     api_key = (os.getenv("SCALEDOWN_API_KEY") or "").strip()
     if not api_key:
         return prompt, False

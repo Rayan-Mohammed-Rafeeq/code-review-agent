@@ -26,15 +26,23 @@ class CodeReviewAgent:
         language: str = "python",
         strict: bool = False,
     ) -> tuple[str, dict[str, Any], list[Issue]]:
-        # Step 1: Compress the code
-        compressed = compress_python_code(code).text
+        lang = (language or "python").strip().lower()
 
-        # Step 2: Run static analysis
-        static_result = run_static_analysis(code=code, filename=filename)
-        static_dict: dict[str, Any] = {"flake8": static_result.flake8, "bandit": static_result.bandit}
+        # Step 1: Compress the code (python gets a specialized compressor; others use raw code).
+        if lang == "python":
+            compressed = compress_python_code(code).text
+        else:
+            compressed = code
+
+        # Step 2: Run static analysis (flake8/bandit are python-only).
+        if lang == "python" and (filename or "").lower().endswith(".py"):
+            static_result = run_static_analysis(code=code, filename=filename)
+            static_dict: dict[str, Any] = {"flake8": static_result.flake8, "bandit": static_result.bandit}
+        else:
+            static_dict = {"flake8": {"skipped": True}, "bandit": {"skipped": True}}
 
         # Step 3: Build the full review prompt
-        review_prompt = self._build_review_prompt(compressed, static_dict, language=language, strict=strict)
+        review_prompt = self._build_review_prompt(compressed, static_dict, language=lang, strict=strict)
 
         # Step 4: Optionally compress the prompt with ScaleDown (compression only)
         compressed_prompt, used_scaledown = compress_with_scaledown(review_prompt)
@@ -67,23 +75,41 @@ class CodeReviewAgent:
 
         This prompt may be optionally compressed by ScaleDown before being sent to the LLM.
         """
+        lang = (language or "python").strip().lower()
+
+        language_tuning: dict[str, str] = {
+            "python": "Python: focus on typing, exceptions, context managers, async correctness, and idiomatic APIs (PEP8/PEP257 when relevant).",
+            "javascript": "JavaScript: focus on async/await + Promise correctness, runtime edge cases, and browser/node compatibility.",
+            "typescript": "TypeScript: focus on type-safety, correct generics, narrowing, and avoiding any/unsafe casts.",
+            "java": "Java: focus on null-safety, resource handling (try-with-resources), collections/streams pitfalls, and concurrency correctness.",
+            "csharp": "C#: focus on nullability, async/await, IDisposable usage, LINQ performance pitfalls, and common .NET best practices.",
+            "go": "Go: focus on error handling, context usage, goroutine leaks, races, and API design conventions.",
+            "rust": "Rust: focus on ownership/borrowing correctness, lifetimes when applicable, error handling (Result), and avoiding unnecessary clones.",
+        }
+
+        lang_hint = language_tuning.get(lang) or (
+            "General: focus on correctness, security, performance, maintainability, and language best practices."
+        )
+
         instructions = (
             "Act as a strict project-level Code Review Agent. Review code as production code. "
             "While reviewing, check for: unused variables/dead code; naming clarity; missing/weak documentation; "
             "magic numbers/hardcoded values; readability/maintainability; basic logical correctness; "
             "code style and language-specific best practices. "
-            "Do not approve code just because it runs or has no syntax errors. "
+            + lang_hint
+            + " Do not approve code just because it runs or has no syntax errors. "
             "Return issues as structured JSON matching the schema (severity/category/description/suggestion/location). "
             "If there are no issues, return an empty list."
             if strict
             else (
                 "Identify issues. Prefer high-signal items. "
-                "If static analysis already reports an issue, you may reference it and expand with context."
+                "If static analysis already reports an issue, you may reference it and expand with context. "
+                + lang_hint
             )
         )
 
         payload = {
-            "language": (language or "python").strip().lower(),
+            "language": lang,
             "compressed_context": compressed_context,
             "static_analysis": static_analysis,
             "instructions": instructions,
