@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="Code Review Agent", layout="wide")
+st.set_page_config(page_title="CRA", layout="wide")
 
 # --- Branding / Theme ---
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
@@ -711,7 +711,7 @@ with col_logo:
         st.image(_LOGO_PATH, width=72)
 
 with col_title:
-    st.markdown('<div class="cra-title">Code Review Agent</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cra-title">CRA</div>', unsafe_allow_html=True)
 
 
 with col_user:

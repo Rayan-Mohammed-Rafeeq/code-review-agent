@@ -1,53 +1,283 @@
 <!-- Project logo -->
 <p align="center">
-  <img src="assets/logo.png" alt="Code Review Agent logo" width="160" />
+  <img src="assets/logo.png" alt="CRA logo" width="160" />
 </p>
 
-# Code Review Agent (FastAPI)
 
-Live demo: [Streamlit UI](https://code-review-agent.streamlit.app) · [Project Docs (Google Doc)](https://docs.google.com/document/d/1iA7EJV4YMokp1tFQOG0eAqqlLqOn_EJI/edit?usp=drive_link&ouid=109768856802920614574&rtpof=true&sd=true)
+# CRA — Code Review Agent (FastAPI + React)
 
-A production-quality, modular AI-powered code review service that combines:
-- **Static analysis** (flake8 + bandit, with a small built-in fallback)
-- **Context compression** for shorter / cheaper prompts
-- **LLM-backed review** (OpenAI-compatible Chat Completions)
-- **Optional prompt compression via ScaleDown** (compression only; not an LLM)
-- **Optional Streamlit UI** for interactive reviews
+A production-quality, modular code review service that combines deterministic static analysis with optional LLM suggestions.
 
----
-
-## Before you push to GitHub (quick safety checklist)
-
-- Do **not** commit `.env` or any Firebase service account JSON.
-- Use `.env.example` as the template for local development.
-- For judge/evaluator runs with no secrets, use **offline mode**: `LLM_PROVIDER=none`.
-- `start_app.bat` is path-independent and should work from any folder.
+- **Backend**: FastAPI (versioned endpoints under `/v2` and mirrored under `/api/v2` for frontend compatibility)
+- **Frontend**: React + Vite + Tailwind
+- **Checks**: flake8 + bandit (with a small built-in fallback)
+- **Prompt optimization**: context compression + optional ScaleDown compression
 
 ---
 
-## What you get
+## On this page
 
-- FastAPI backend with endpoints:
-  - `POST /review` (JSON)
-  - `POST /review/file` (multipart upload)
-  - `GET /healthz` (liveness)
-  - `GET /configz` (sanitized config)
-- Structured response with:
-  - `compressed_context`
-  - `static_analysis` (flake8 + bandit outputs)
-  - `issues` (ranked, structured findings)
-  - optional `strict_findings` (human-readable fixed format)
+- [Overview](#overview)
+- [Features](#features)
+- [Supported Languages](#supported-languages)
+- [How It Works](#how-it-works)
+- [High-Level Architecture](#high-level-architecture)
+- [Live Deployment Links](#live-deployment-links)
+- [API Quick Start](#api-quick-start)
+- [Request Format](#request-format)
+- [Response Format](#response-format)
+- [Severity Levels](#severity-levels)
+- [Error Handling](#error-handling)
+- [Configuration & Environment Variables](#configuration--environment-variables)
+- [Offline Mode (No LLM)](#offline-mode-no-llm)
+- [Limits & Constraints](#limits--constraints)
+- [Security & Privacy](#security--privacy)
+- [Versioning & Changelog](#versioning--changelog)
+- [Contribution Guide](#contribution-guide)
 
 ---
 
-## Quick start (Windows / cmd.exe)
+## Overview
 
-### 0) Judge-friendly default: offline mode (no network, no secrets)
+CRA takes a source file (or raw code), compresses it for efficient prompting, runs static analysis when applicable, and returns a **structured, ranked** set of issues.
 
-If you're running this for evaluation without any external credentials, set:
+You can run CRA in:
+- **Offline mode** (no secrets, no network): compression + static analysis only
+- **LLM mode**: adds LLM-backed findings via an OpenAI-compatible Chat Completions API
+
+---
+
+## Features
+
+- FastAPI backend with JSON + file upload endpoints
+- Ranked, structured issues with category + severity
+- Optional strict mode output (fixed-format human-readable findings)
+- Optional Firebase token verification (with safe fallback)
+- Modern UI (React + Tailwind) and optional Streamlit UI (`ui.py`)
+
+---
+
+## Supported Languages
+
+The UI supports multiple languages for editor highlighting. Static analysis and deeper tooling depend on server runtime availability.
+
+- Python
+- JavaScript
+- TypeScript
+- Java
+- C#
+- Go
+- Rust
+
+---
+
+## How It Works
+
+Pipeline (see `app/ai_agent.py`):
+
+1. **Compress code** (`app/compressor.py`)
+2. **Run static analysis** (`app/static_checks.py`)
+3. **Build a review prompt** (compressed context + static results)
+4. Optionally **compress the prompt** via ScaleDown (`app/scaledown_compression.py`)
+5. Call the **LLM** (`app/llm_client.py`) and parse/validate structured JSON
+6. **Rank issues** (`app/ranker.py`) and return the response
+
+---
+
+## High-Level Architecture
+
+High-level pipeline overview:
+
+<p align="center">
+  <img src="assets/architecture.png" alt="CRA high-level architecture" width="900" />
+</p>
+
+---
+
+## Live Deployment Links
+
+- Frontend (Vercel): https://coderagent.vercel.app/
+- Backend (Render): https://code-review-agent-api.onrender.com/
+
+> Tip: If you call the API from a browser, the backend must allow your frontend origin via `CODE_REVIEW_CORS_ORIGINS` (example: `https://coderagent.vercel.app`).
+
+---
+
+## API Quick Start
+
+### Health check
+
+```bash
+curl https://code-review-agent-api.onrender.com/healthz
+```
+
+### Review code (v2 JSON)
+
+```bash
+curl -X POST https://code-review-agent-api.onrender.com/v2/review/file \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"input.py","code":"def add(a,b):\n    return a+b\n","language":"python","enabled_checks":{"security":true,"style":true,"performance":true}}'
+```
+
+> Note: Versioned routes are under `/v2/...` and mirrored under `/api/v2/...` for frontend compatibility.
+
+---
+
+## Request Format
+
+Recommended endpoint used by the frontend:
+
+- `POST /v2/review/file`
+
+Example JSON payload:
+
+```json
+{
+  "filename": "input.py",
+  "code": "def add(a, b):\n    return a + b\n",
+  "language": "python",
+  "enabled_checks": {
+    "security": true,
+    "style": true,
+    "performance": true
+  }
+}
+```
+
+---
+
+## Response Format
+
+High-level response includes:
+
+- `issues[]` — ranked findings
+- `score` — normalized score + counts
+- `static_analysis` — tool output summaries
+
+Example (trimmed):
+
+```json
+{
+  "issues": [
+    {
+      "file": "input.py",
+      "line": 12,
+      "category": "security",
+      "severity": "high",
+      "description": "User-controlled input is used in SQL query",
+      "suggestion": "Use parameterized queries / prepared statements",
+      "source": "bandit"
+    }
+  ],
+  "score": {
+    "score": 92,
+    "counts_by_severity": { "critical": 0, "high": 1, "medium": 0, "low": 0, "info": 0 }
+  },
+  "static_analysis": {
+    "flake8": { "issues": [] },
+    "bandit": { "result": { "results": [] } }
+  }
+}
+```
+
+---
+
+## Severity Levels
+
+Severities are normalized to:
+
+- `critical`
+- `high`
+- `medium`
+- `low`
+- `info`
+
+---
+
+## Error Handling
+
+- `400` — invalid input (missing code, invalid URL, etc.)
+- `422` — validation error from request parsing
+- `502` — upstream issues (LLM provider/network/runtime errors)
+
+---
+
+## Configuration & Environment Variables
+
+### Frontend
+
+- `VITE_API_BASE_URL` — point the UI at your backend
+  - Example: `https://code-review-agent-api.onrender.com`
+
+### Backend
+
+CORS:
+- `CODE_REVIEW_CORS_ORIGINS` — comma-separated browser origins
+  - Example: `https://coderagent.vercel.app`
+- `CODE_REVIEW_CORS_ORIGIN_REGEX` — optional regex (useful for Vercel previews)
+
+LLM:
+- `LLM_PROVIDER` — defaults to `openai`; set `none` for offline mode
+- `LLM_API_KEY`
+- `LLM_BASE_URL` (default: `https://openrouter.ai/api/v1`)
+- `LLM_MODEL` (default: `qwen/qwen3-coder:free`)
+- `LLM_TIMEOUT_SECONDS` — request timeout (default: 30)
+
+ScaleDown (optional):
+- `SCALEDOWN_API_KEY`
+
+---
+
+## Offline Mode (No LLM)
+
+Set:
 - `LLM_PROVIDER=none`
 
-In this mode the API still performs **compression + static analysis**, and returns an empty `issues[]` list (deterministic, no network calls).
+Result:
+- No network calls
+- Deterministic runs
+- Static analysis still executes
+
+---
+
+## Limits & Constraints
+
+- Large files may be compressed/truncated to fit prompt limits.
+- Some language-specific checks depend on runtime availability.
+- In offline mode, LLM-backed findings are disabled.
+
+---
+
+## Security & Privacy
+
+- Do not commit real API keys.
+- Do not commit `.env` or Firebase Admin SDK service account JSON.
+- `/configz` never returns secret values.
+
+---
+
+## Versioning & Changelog
+
+- API routes are versioned under `/v2`.
+- The app version is exposed via `GET /healthz` (`version` field).
+
+---
+
+## Contribution Guide
+
+1. Fork the repo and create a feature branch.
+2. Run backend tests (`pytest`) and frontend build checks.
+3. Open a PR describing the change and validation steps.
+
+---
+
+## Local development (Windows / cmd.exe)
+
+### 0) Offline mode (no network, no secrets)
+
+```cmd
+set LLM_PROVIDER=none
+```
 
 ### 1) Create a virtualenv + install dependencies
 
@@ -57,160 +287,37 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2) Configure the LLM (optional)
-
-If you want LLM-backed reviews, configure an API key via environment variables (or create a `.env` file in the repo root):
-- `LLM_API_KEY`
-
-Defaults (override if you want):
-- `LLM_BASE_URL` defaults to `https://openrouter.ai/api/v1`
-- `LLM_MODEL` defaults to `qwen/qwen3-coder:free`
-
-Optional (OpenRouter attribution headers):
-- `OPENROUTER_SITE_URL` (becomes `HTTP-Referer`)
-- `OPENROUTER_APP_TITLE` (becomes `X-Title`)
-
-Security note:
-- Never commit `.env` or Firebase service-account JSON keys.
-- `.env.example` contains **placeholders only**. Copy it to `.env` and fill real values locally.
-
-### 3) Run the API
+### 2) Run the API
 
 ```cmd
 uvicorn app.main:app --reload
 ```
 
-Open:
-- API health: `http://127.0.0.1:8000/healthz`
-- Swagger UI: `http://127.0.0.1:8000/docs`
+### 3) Run the UI
 
----
-
-## Run the UI (Streamlit)
-
-The repo includes a Streamlit frontend in `ui.py`.
-
-### Auth in the UI
-
-Auth is disabled in the UI.
-
-If your API requires authentication, call it directly (e.g., via curl/Postman) or put the Streamlit app behind your own auth layer.
-
-### Option A: Start everything with the provided script
+Start everything:
 
 ```cmd
 start_app.bat
 ```
 
-This opens two windows:
-- Backend (FastAPI) on `http://127.0.0.1:8000`
-- Frontend (Streamlit) on `http://localhost:8501`
-
-### Option B: Start UI manually
-
-If you already started the backend:
+Or run Streamlit:
 
 ```cmd
 streamlit run ui.py
 ```
 
-If your API isn't at `http://127.0.0.1:8000`, set:
-- `CODE_REVIEW_API_URL` (used by the UI)
-
----
-
-## Deployment environment variables
-
-### Streamlit UI
-
-- `CODE_REVIEW_API_URL` — base URL of your deployed API
-  - Example: `https://my-code-review-api.onrender.com`
-
-### FastAPI backend
-
-- `CODE_REVIEW_CORS_ORIGINS` — comma-separated list of allowed browser origins
-  - Example: `https://my-ui.example.com`
-  - Example (multiple): `https://my-ui.example.com,https://my-ui2.example.com`
-
-
-- `LLM_PROVIDER` — defaults to `openai`
-  - Set `LLM_PROVIDER=none` to **disable LLM calls** (offline mode)
-- `LLM_TIMEOUT_SECONDS` — request timeout (default: 30)
-- `SCALEDOWN_API_KEY` — enables ScaleDown prompt compression (optional)
-
-### Offline mode (no network / no LLM)
-
-If you want to use only compression + static analysis:
-- Set `LLM_PROVIDER=none`
-
-The API will return an empty `issues` list. Static analysis still runs.
-
----
-
-## API
-
-### `POST /review` (JSON)
-
-Request body:
-
-```json
-{
-  "code": "def add(a, b):\n    return a + b\n",
-  "language": "python",
-  "filename": "example.py",
-  "strict": false
-}
-```
-
-Notes:
-- Only `python` is supported end-to-end right now.
-- If `strict=true`, the response also includes `strict_findings`.
-
-### `POST /review/file` (multipart)
-
-Upload a UTF-8 Python file using `multipart/form-data` with the field name `file`.
-
-### Response shape
-
-High-level response fields:
-- `compressed_context` — compressed code summary
-- `static_analysis` — tool outputs:
-  - `static_analysis.flake8.issues[]`
-  - `static_analysis.bandit.result.results[]`
-- `issues[]` — structured items:
-  - `severity`: `high | medium | low`
-  - `category`: `security | bug | performance | style`
-  - `description`, `suggestion`
-  - optional `location`
-
-### Health + config
-
-- `GET /healthz` returns `{ ok, service, version }`
-- `GET /configz` returns sanitized config (never returns the API key value)
-
----
-
-## How it works (high level)
-
-The backend's review pipeline (see `app/ai_agent.py`):
-1. **Compress code** (`app/compressor.py`)
-2. **Run static analysis** (`app/static_checks.py`)
-3. **Build a review prompt** that includes compressed context + static results
-4. Optionally **compress the prompt** via ScaleDown (`app/scaledown_compression.py`)
-5. Call the **real LLM** (`app/llm_client.py`) and parse/validate structured JSON
-6. **Rank issues** (`app/ranker.py`) and return the response
-
 ---
 
 ## Tests
 
-Run all tests:
+Backend tests:
 
 ```cmd
 pytest
 ```
 
-There's also an interactive menu script:
+Interactive test runner:
 
 ```cmd
 run_tests.bat
@@ -218,85 +325,11 @@ run_tests.bat
 
 ---
 
-## Troubleshooting
-
-### 400: “LLM is not configured (missing: …)”
-
-Set `LLM_API_KEY` and restart the API.
-
-Optional overrides:
-- `LLM_BASE_URL`
-- `LLM_MODEL`
-
-If you intended to run without an LLM, set:
-- `LLM_PROVIDER=none`
-
-### 401 / 404 / 400 from the provider
-
-The LLM client is built for OpenAI-compatible Chat Completions endpoints.
-Common causes:
-- `LLM_BASE_URL` missing `/v1`
-- wrong `LLM_MODEL`
-- key copied with quotes or redacted characters
-
-### flake8/bandit not producing output
-
-`flake8` and `bandit` are invoked via `python -m ...`. If the tools fail,
-responses include `tool_error` / `stderr` to help diagnose environment issues.
-
----
-
-## Project structure
-
-- `app/main.py` — FastAPI app and endpoints
-- `app/ai_agent.py` — orchestrates compression + static checks + LLM review
-- `app/llm_client.py` — OpenAI-compatible client + safe JSON parsing
-- `app/static_checks.py` — flake8 + bandit runner with small builtin fallback
-- `app/compressor.py` — Python code compression
-- `app/scaledown_compression.py` — optional ScaleDown prompt compression
-- `ui.py` — Streamlit frontend
-- `tests/` — pytest suite
-
----
-
-## Security notes
-
-- Never commit real API keys.
-- Prefer using a local `.env` file for development.
-- The `/configz` endpoint intentionally never returns your key.
-
-## Firebase Auth (optional)
-
-The backend can verify Firebase ID tokens if you provide a Firebase **Admin SDK service account**.
-
-### Backend credentials discovery
-
-The backend looks for credentials in this order:
-
-1. `FIREBASE_SERVICE_ACCOUNT_JSON` — an env var containing the full service account JSON
-2. `FIREBASE_SERVICE_ACCOUNT_FILE` — a path to a JSON file
-3. A file named `firebase-service-account.json` in the repo root (current working directory)
-
-If none are provided (or initialization fails), the backend falls back to the built-in demo auth.
-
-### Troubleshooting: `CONFIGURATION_NOT_FOUND`
-
-This error is almost always a **project mismatch**:
-
-- Your frontend is generating an ID token for Firebase project **A**
-- Your backend service account JSON belongs to project **B**
-
-To debug locally:
-
-- Visit `GET /configz` and check `firebase.credential_source` and `firebase.initialized`.
-- Call `GET /auth/firebase_debug` with your `Authorization: Bearer <id_token>` header.
-  It returns **unverified** token hints like `iss` and the inferred `firebase_project_id`.
-
-Fix is to ensure the token's project (from `iss`) matches the service account JSON `project_id`.
 
 ## Quality gates (optional but recommended)
 
-This repo includes lightweight tooling to show real engineering beyond raw LLM output:
-- Lint: `ruff check .`
-- Format: `ruff format .`
-- Types: `pyright`
+```cmd
+ruff check .
+ruff format .
+pyright
+```

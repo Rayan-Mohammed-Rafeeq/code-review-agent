@@ -92,7 +92,7 @@ class CodeReviewAgent:
         )
 
         instructions = (
-            "Act as a strict project-level Code Review Agent. Review code as production code. "
+            "Act as a strict project-level CRA. Review code as production code. "
             "While reviewing, check for: unused variables/dead code; naming clarity; missing/weak documentation; "
             "magic numbers/hardcoded values; readability/maintainability; basic logical correctness; "
             "code style and language-specific best practices. "

@@ -1,5 +1,6 @@
 /** @import must precede all other statements */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Fira+Code:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -54,6 +55,30 @@
     --score-green: 84 81% 59%;
     --score-yellow: 47.9 95.8% 53.1%;
     --score-red: 0 84.2% 60.2%;
+
+    /*
+     * Footer brand palette (fixed across light/dark mode)
+     * Deep navy anchor + emerald/blue accents.
+     */
+    --footer-bg: 222 47% 11%;
+    --footer-fg: 210 40% 98%;
+    --footer-muted: 214 24% 82%;
+    --footer-border: 217 28% 20%;
+    --footer-accent-blue: 199 89% 48%;
+    --footer-accent-emerald: 160 84% 39%;
+    --footer-ring: 199 89% 58%;
+
+    /*
+     * Header brand palette (fixed across light/dark mode)
+     * Keeps navigation chrome consistent and branded like the footer.
+     */
+    --header-bg: var(--footer-bg);
+    --header-fg: var(--footer-fg);
+    --header-muted: var(--footer-muted);
+    --header-border: var(--footer-border);
+    --header-accent-blue: var(--footer-accent-blue);
+    --header-accent-emerald: var(--footer-accent-emerald);
+    --header-ring: var(--footer-ring);
   }
 
   .dark {
@@ -105,6 +130,20 @@
     @apply bg-background text-foreground;
   }
 
+  /* Ensure Monaco uses our premium monospace stack */
+  .monaco-editor,
+  .monaco-editor .view-lines,
+  .monaco-editor .margin,
+  .monaco-editor .inputarea {
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace !important;
+  }
+
+  /* Subtle, production-grade cursor + selection styling */
+  .monaco-editor .cursor {
+    transition: background-color 150ms ease;
+  }
+
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -114,5 +153,91 @@
   code {
     overflow-x: auto;
     white-space: pre;
+  }
+}
+
+@keyframes dash {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 14px 0;
+  }
+}
+
+@keyframes btn-shine {
+  0% {
+    transform: translateX(-130%) skewX(-18deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0);
+  }
+}
+
+@keyframes grid-drift {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 64px 0, 0 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer utilities {
+  /* Subtle SaaS-style shine sweep on hover/focus-visible */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .btn-shine::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    pointer-events: none;
+    border-radius: inherit;
+
+    /* Copy/Clear-style neutral shine (consistent across light/dark) */
+    background: linear-gradient(
+      110deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.0) 35%,
+      rgba(255, 255, 255, 0.22) 50%,
+      rgba(255, 255, 255, 0.0) 65%,
+      transparent 100%
+    );
+
+    transform: translateX(-130%) skewX(-18deg);
+    opacity: 0;
+  }
+
+  .btn-shine:hover::after,
+  .btn-shine:focus-visible::after {
+    animation: btn-shine 650ms ease-out;
   }
 }

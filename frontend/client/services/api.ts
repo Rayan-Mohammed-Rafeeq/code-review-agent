@@ -51,7 +51,20 @@ function breakdownFromCounts(counts: Record<string, number> | undefined): Review
 
 export const reviewCode = async (data: ReviewRequest): Promise<ReviewResponse> => {
   // Map the UI request to v2 backend request.
-  const filename = data.language === 'python' ? 'input.py' : `input.${data.language}`;
+  const lang = data.language;
+  const extByLang: Record<string, string> = {
+    python: 'py',
+    javascript: 'js',
+    typescript: 'ts',
+    java: 'java',
+    csharp: 'cs',
+    'c#': 'cs',
+    go: 'go',
+    rust: 'rs',
+  };
+
+  const ext = extByLang[lang] ?? lang;
+  const filename = lang === 'python' ? 'input.py' : `input.${ext}`;
 
   const response = await apiClient.post<V2ReviewResult>(
     '/v2/review/file',
@@ -79,4 +92,23 @@ export const reviewCode = async (data: ReviewRequest): Promise<ReviewResponse> =
       suggestion: it.suggestion,
     })),
   };
+};
+
+export type FormatResponse = {
+  code: string;
+  formatter: string;
+  changed: boolean;
+};
+
+export const formatCode = async (params: {
+  code: string;
+  language?: string;
+  filename?: string;
+}): Promise<FormatResponse> => {
+  const response = await apiClient.post<FormatResponse>('/v2/format', {
+    code: params.code,
+    language: params.language,
+    filename: params.filename,
+  });
+  return response.data;
 };

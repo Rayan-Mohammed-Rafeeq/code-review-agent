@@ -62,6 +62,34 @@ export default {
           yellow: "hsl(var(--score-yellow))",
           red: "hsl(var(--score-red))",
         },
+
+        /**
+         * Header brand palette (intentionally NOT theme-dependent).
+         * These tokens are defined once in :root (and NOT overridden in .dark).
+         */
+        header: {
+          bg: "hsl(var(--header-bg))",
+          fg: "hsl(var(--header-fg))",
+          muted: "hsl(var(--header-muted))",
+          border: "hsl(var(--header-border))",
+          "accent-blue": "hsl(var(--header-accent-blue))",
+          "accent-emerald": "hsl(var(--header-accent-emerald))",
+          ring: "hsl(var(--header-ring))",
+        },
+
+        /**
+         * Footer brand palette (intentionally NOT theme-dependent).
+         * These tokens are defined once in :root (and NOT overridden in .dark).
+         */
+        footer: {
+          bg: "hsl(var(--footer-bg))",
+          fg: "hsl(var(--footer-fg))",
+          muted: "hsl(var(--footer-muted))",
+          border: "hsl(var(--footer-border))",
+          "accent-blue": "hsl(var(--footer-accent-blue))",
+          "accent-emerald": "hsl(var(--footer-accent-emerald))",
+          ring: "hsl(var(--footer-ring))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -25,4 +25,3 @@ async def test_v2_pipeline_records_llm_429_as_diagnostic_not_issue():
 
     # Score should still be computed from real issues only.
     assert 0 <= r.score.score <= 100
-

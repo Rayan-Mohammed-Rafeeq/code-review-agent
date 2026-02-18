@@ -1,23 +1,107 @@
 import * as React from 'react';
 import { useState, useRef } from 'react';
-import { CodeEditor } from '@/components/Editor';
+import { CodeEditor, type EditorTab } from '@/components/Editor';
 import { ScoreCard } from '@/components/ScoreCard';
 import { SeverityBreakdown } from '@/components/SeverityBreakdown';
 import { IssueTable } from '@/components/IssueTable';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { AppFooter } from '@/components/AppFooter';
 import { Button } from '@/components/ui/button';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { reviewCode } from '@/services/api';
 import { ReviewResponse } from '@shared/api';
 import { Loader2, Play, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate, useLocation } from "react-router-dom";
+import { NavUnderline } from "@/components/NavUnderline";
+import { AnimatedBackground } from "@/components/AnimatedBackground";
 
 const DEFAULT_CODE = ``;
 
+type TabState = {
+  id: string;
+  name: string;
+  language: string;
+  code: string;
+  initialCode?: string;
+};
+
+const STORAGE_KEY = 'cra.editor.tabs.v1';
+
+function safeParseTabs(raw: string | null): { tabs: TabState[]; activeTabId: string } | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as any;
+    if (!parsed || !Array.isArray(parsed.tabs) || typeof parsed.activeTabId !== 'string') return null;
+    const tabs: TabState[] = parsed.tabs
+      .filter((t: any) => t && typeof t.id === 'string' && typeof t.name === 'string')
+      .map((t: any) => ({
+        id: String(t.id),
+        name: String(t.name),
+        language: String(t.language || 'python'),
+        code: String(t.code || ''),
+        initialCode: String(t.initialCode ?? t.code ?? ''),
+      }));
+    if (tabs.length === 0) return null;
+    const activeTabId = tabs.some((t) => t.id === parsed.activeTabId) ? parsed.activeTabId : tabs[0].id;
+    return { tabs, activeTabId };
+  } catch {
+    return null;
+  }
+}
+
+function languageFromFilename(name: string, fallback: string): string {
+  const lower = (name || '').toLowerCase();
+  if (lower.endsWith('.py')) return 'python';
+  if (lower.endsWith('.js')) return 'javascript';
+  if (lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript';
+  if (lower.endsWith('.java')) return 'java';
+  if (lower.endsWith('.cs')) return 'csharp';
+  if (lower.endsWith('.go')) return 'go';
+  if (lower.endsWith('.rs')) return 'rust';
+  return fallback;
+}
+
+function newId() {
+  return `tab-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
+}
+
 const ReviewPage = () => {
-  const [code, setCode] = useState(DEFAULT_CODE);
-  const [language, setLanguage] = useState('python');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const goHomeOrTop = React.useCallback(() => {
+    if (location.pathname === "/") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    navigate("/");
+  }, [location.pathname, navigate]);
+
+  const [tabs, setTabs] = useState<TabState[]>(() => {
+    const stored = safeParseTabs(window.localStorage.getItem(STORAGE_KEY));
+    if (stored) return stored.tabs;
+    return [
+      { id: 'tab-1', name: 'main.py', language: 'python', code: DEFAULT_CODE, initialCode: DEFAULT_CODE },
+      { id: 'tab-2', name: 'utils.py', language: 'python', code: '', initialCode: '' },
+    ];
+  });
+
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    const stored = safeParseTabs(window.localStorage.getItem(STORAGE_KEY));
+    return stored?.activeTabId ?? 'tab-1';
+  });
+
+  // Persist tabs
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs, activeTabId }));
+    } catch {
+      // ignore
+    }
+  }, [tabs, activeTabId]);
+
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ReviewResponse | null>(null);
   const [strict, setStrict] = useState(false);
@@ -26,8 +110,35 @@ const ReviewPage = () => {
     style: true,
     performance: true,
   });
-  
+
+  // Update language for the active tab (drives syntax highlighting + review request)
+  const setLanguage = (nextLang: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, language: nextLang } : t)));
+  };
+
   const editorRef = useRef<any>(null);
+
+  const activeTab = React.useMemo(() => {
+    return tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+  }, [tabs, activeTabId]);
+
+  const code = activeTab?.code ?? '';
+  const language = activeTab?.language ?? 'python';
+
+  const updateActiveTabCode = (next: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, code: next } : t)));
+  };
+
+  const handleClearEditor = () => {
+    updateActiveTabCode('');
+    setResult(null);
+    // Keep focus friendly
+    try {
+      editorRef.current?.focus?.();
+    } catch {
+      // ignore
+    }
+  };
 
   const handleReview = async () => {
     if (!code.trim()) {
@@ -84,33 +195,113 @@ const ReviewPage = () => {
     return lang || 'code';
   }, [language]);
 
+  const editorTabs: EditorTab[] = React.useMemo(
+    () =>
+      tabs.map(({ id, name, language, code, initialCode }) => ({
+        id,
+        name,
+        language,
+        isDirty: (code ?? '') !== (initialCode ?? ''),
+      })),
+    [tabs],
+  );
+
+  const onNewTab = () => {
+    const id = newId();
+    const baseLang = tabs.find((t) => t.id === activeTabId)?.language ?? 'python';
+    const name = 'untitled.py';
+    const language = languageFromFilename(name, baseLang);
+    setTabs((prev) => [
+      ...prev,
+      {
+        id,
+        name,
+        language,
+        code: '',
+        initialCode: '',
+      },
+    ]);
+    setActiveTabId(id);
+    setResult(null);
+  };
+
+  const onCloseTab = (id: string) => {
+    setTabs((prev) => {
+      if (prev.length <= 1) {
+        // Keep at least one tab open
+        return prev.map((t) => (t.id === id ? { ...t, code: '', initialCode: '' } : t));
+      }
+
+      const idx = prev.findIndex((t) => t.id === id);
+      const nextTabs = prev.filter((t) => t.id !== id);
+
+      if (activeTabId === id) {
+        const nextActive = nextTabs[Math.max(0, idx - 1)]?.id ?? nextTabs[0].id;
+        setActiveTabId(nextActive);
+      }
+
+      return nextTabs;
+    });
+    setResult(null);
+  };
+
+  const onRenameTab = (id: string, newName: string) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const nextLang = languageFromFilename(newName, t.language);
+        return { ...t, name: newName, language: nextLang };
+      }),
+    );
+  };
+
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="min-h-screen w-full bg-background text-foreground flex flex-col">
+      <div className="min-h-screen w-full bg-background text-foreground flex flex-col relative">
+        <AnimatedBackground />
         {/* Header */}
-        <header className="w-full border-b border-border bg-card/70 backdrop-blur-md sticky top-0 z-50">
-          <div className="w-full px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 flex items-center justify-center overflow-hidden rounded-md bg-muted/40">
-                <img
-                  src="/logo.png"
-                  alt="Code Review Agent Logo"
-                  className="w-full h-full object-contain"
-                />
+        <header className="w-full sticky top-0 z-50 bg-header-bg text-header-fg">
+          {/* subtle bottom border + accent fade to separate header from content */}
+          <div className="border-b border-header-border">
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-header-accent-blue/45 to-transparent" />
+            <div className="w-full px-4 h-16 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={goHomeOrTop}
+                  className="group inline-flex items-center gap-3 min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-header-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-header-bg"
+                  aria-label="Go to home"
+                  title="Home"
+                >
+                  <img
+                    src="/logo.png"
+                    alt="CRA Logo"
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 object-contain"
+                  />
+                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight uppercase bg-gradient-to-r from-header-accent-blue to-header-accent-emerald bg-clip-text text-transparent truncate">
+                    CRA
+                  </h1>
+                </button>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight uppercase bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent truncate">
-                Code Review Agent
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Button variant="ghost" size="sm" className="hover:bg-accent/60">Docs</Button>
-              <Button variant="ghost" size="sm" className="hover:bg-accent/60">History</Button>
-              <ThemeToggle />
+              <div className="flex items-center gap-2 sm:gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="group relative text-header-muted hover:text-header-fg focus-visible:ring-2 focus-visible:ring-header-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-header-bg"
+                  onClick={() => navigate("/docs")}
+                >
+                  Docs
+                  <NavUnderline />
+                </Button>
+                <ThemeToggle />
+              </div>
             </div>
           </div>
         </header>
 
-        <SidebarInset className="flex-1">
+        <SidebarInset className="flex-1 relative">
           <main className="w-full flex-1 px-4 pt-8 pb-20">
             <div className="container mx-auto max-w-7xl">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -129,11 +320,18 @@ const ReviewPage = () => {
                   <CodeEditor
                     code={code}
                     language={language}
-                    onChange={(val) => setCode(val || '')}
+                    onChange={(val) => updateActiveTabCode(val || '')}
                     editorRef={editorRef}
+                    onClear={handleClearEditor}
+                    tabs={editorTabs}
+                    activeTabId={activeTabId}
+                    onTabChange={(id) => setActiveTabId(id)}
+                    onTabRename={onRenameTab}
+                    onTabClose={onCloseTab}
+                    onNewTab={onNewTab}
                   />
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end pt-2 gap-3 flex-wrap">
                     <Button
                       onClick={handleReview}
                       disabled={loading}
@@ -216,6 +414,8 @@ const ReviewPage = () => {
             </div>
           </main>
         </SidebarInset>
+
+        <AppFooter />
       </div>
     </SidebarProvider>
   );

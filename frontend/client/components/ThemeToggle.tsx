@@ -11,13 +11,13 @@ export const ThemeToggle = () => {
       variant="ghost"
       size="icon"
       onClick={toggleTheme}
-      className="rounded-full w-9 h-9 text-foreground hover:bg-accent/60"
+      className="h-9 w-9 rounded-full text-inherit focus-visible:ring-2 focus-visible:ring-header-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-header-bg"
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
     >
       {theme === "dark" ? (
-        <Sun className="h-5 w-5 text-foreground" />
+        <Sun className="h-5 w-5" />
       ) : (
-        <Moon className="h-5 w-5 text-foreground" />
+        <Moon className="h-5 w-5" />
       )}
       <span className="sr-only">Toggle theme</span>
     </Button>

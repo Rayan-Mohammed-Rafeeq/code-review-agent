@@ -69,3 +69,30 @@ def test_flake8_parsing_windows_drive_letter_paths(monkeypatch):
     res = run_static_analysis(code='prin("hello")\n', filename="input.py")
     issues = res.flake8.get("issues") or []
     assert any(i.get("code") == "F821" for i in issues)
+
+
+def test_builtin_fallback_does_not_flag_module_dunder_name(monkeypatch):
+    """Regression: the built-in undefined-name fallback must not flag `__name__`."""
+
+    from app.static_checks import run_static_analysis
+
+    # Force flake8 to return no issues so the builtin fallback runs.
+    class _P:
+        def __init__(self) -> None:
+            self.returncode = 0
+            self.stdout = ""
+            self.stderr = ""
+
+    def _fake_run(*args, **kwargs):
+        return _P()
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    code = """\
+if __name__ == "__main__":
+    pass
+"""
+
+    res = run_static_analysis(code=code, filename="input.py")
+    issues = res.flake8.get("issues") or []
+    assert not any(i.get("code") == "F821" and "__name__" in (i.get("message") or "") for i in issues)

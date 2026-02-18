@@ -205,7 +205,7 @@ async def request_llm_review(
         )
     )
 
-    body: dict[str, Any] = {
+    request_body: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
@@ -250,7 +250,7 @@ async def request_llm_review(
         return r.json()
 
     try:
-        data = await _do_post(body)
+        data = await _do_post(request_body)
     except httpx.HTTPStatusError as e:
         status = e.response.status_code if e.response is not None else None
         text = ""
@@ -269,7 +269,6 @@ async def request_llm_review(
             except Exception:
                 retry_after = None
 
-            last_exc: httpx.HTTPStatusError | None = e
             for attempt in range(3):
                 logger.info(
                     "LLM rate limited (429); retrying",
@@ -277,11 +276,10 @@ async def request_llm_review(
                 )
                 await _sleep_rate_limit(attempt=attempt, retry_after=retry_after)
                 try:
-                    data = await _do_post(body)
+                    data = await _do_post(request_body)
                     # Success: exit the retry loop and proceed.
                     break
                 except httpx.HTTPStatusError as e_rl:
-                    last_exc = e_rl
                     if e_rl.response is not None and e_rl.response.status_code == 429:
                         continue
                     raise
@@ -300,12 +298,12 @@ async def request_llm_review(
 
         # Provider compatibility: many OpenAI-compatible endpoints reject response_format.
         # Retry ONCE on any 400, removing response_format, to maximize compatibility.
-        if status == 400 and "response_format" in body:
+        if status == 400 and "response_format" in request_body:
             logger.info(
                 "LLM provider returned 400; retrying once without response_format",
                 extra={"base_url": base_url, "model": model},
             )
-            retry_body = dict(body)
+            retry_body = dict(request_body)
             retry_body.pop("response_format", None)
             try:
                 data = await _do_post(retry_body)
@@ -399,12 +397,8 @@ async def request_llm_review(
                     return []
                 return [
                     Issue(
-                        severity=Issue.model_fields["severity"].annotation.high
-                        if hasattr(Issue.model_fields["severity"].annotation, "high")
-                        else "high",
-                        category=Issue.model_fields["category"].annotation.bug
-                        if hasattr(Issue.model_fields["category"].annotation, "bug")
-                        else "bug",
+                        severity="high",
+                        category="bug",
                         description="LLM returned no valid issues",
                         suggestion="Retry; if it persists, adjust the prompt/schema and validate provider response_format support.",
                         metadata={"error": "no_valid_issues", "dropped": invalid_items, "response": parsed_obj},
@@ -413,12 +407,12 @@ async def request_llm_review(
 
         # Provider compatibility: many OpenAI-compatible endpoints reject response_format.
         # Retry ONCE on any 400, removing response_format, to maximize compatibility.
-        if status == 400 and "response_format" in body:
+        if status == 400 and "response_format" in request_body:
             logger.info(
                 "LLM provider returned 400; retrying once without response_format",
                 extra={"base_url": base_url, "model": model},
             )
-            retry_body = dict(body)
+            retry_body = dict(request_body)
             retry_body.pop("response_format", None)
             try:
                 data = await _do_post(retry_body)
@@ -552,12 +546,8 @@ async def request_llm_review(
     except ValueError as e:
         return [
             Issue(
-                severity=Issue.model_fields["severity"].annotation.high
-                if hasattr(Issue.model_fields["severity"].annotation, "high")
-                else "high",
-                category=Issue.model_fields["category"].annotation.bug
-                if hasattr(Issue.model_fields["category"].annotation, "bug")
-                else "bug",
+                severity="high",
+                category="bug",
                 description="LLM response was not valid JSON",
                 suggestion="Retry; if it persists, log the raw response and adjust the LLM prompt/response_format.",
                 metadata={"error": "invalid_json", "detail": str(e)},
@@ -572,12 +562,8 @@ async def request_llm_review(
     except json.JSONDecodeError as e:
         return [
             Issue(
-                severity=Issue.model_fields["severity"].annotation.high
-                if hasattr(Issue.model_fields["severity"].annotation, "high")
-                else "high",
-                category=Issue.model_fields["category"].annotation.bug
-                if hasattr(Issue.model_fields["category"].annotation, "bug")
-                else "bug",
+                severity="high",
+                category="bug",
                 description="LLM returned non-JSON content",
                 suggestion="Ensure response_format=json_object is supported by your provider; otherwise enforce JSON in the prompt.",
                 metadata={"error": "non_json_content", "detail": str(e), "content_snippet": raw_content[:500]},
@@ -588,12 +574,8 @@ async def request_llm_review(
     if not isinstance(issues_raw, list):
         return [
             Issue(
-                severity=Issue.model_fields["severity"].annotation.high
-                if hasattr(Issue.model_fields["severity"].annotation, "high")
-                else "high",
-                category=Issue.model_fields["category"].annotation.bug
-                if hasattr(Issue.model_fields["category"].annotation, "bug")
-                else "bug",
+                severity="high",
+                category="bug",
                 description="LLM JSON response missing 'issues' array",
                 suggestion="Update the prompt/schema to always include an 'issues' array.",
                 metadata={"error": "missing_issues", "response": parsed_obj},
@@ -795,8 +777,7 @@ class LLMClient:
 
         # Prefer a generic 'complete' style method if present.
         if hasattr(self, "_complete"):
-            # type: ignore[attr-defined]
-            return await self._complete(prompt=review_payload)
+            return await self._complete(prompt=review_payload)  # type: ignore[attr-defined]
 
         # Fallback: reuse existing review() method if available.
         if hasattr(self, "review"):

@@ -18,6 +18,7 @@ from app.deps import get_agent
 from app.firebase_debug import get_token_hints
 from app.logging_config import configure_logging
 from app.models import ReviewRequest, ReviewResponse
+from app.routers.format import router as format_router
 from app.routers.review_v2 import router as review_v2_router
 from app.settings import Settings
 from app.strict_format import format_strict_findings
@@ -28,7 +29,7 @@ logger = logging.getLogger("code_review_agent")
 
 APP_VERSION = "1.0.0"
 
-app = FastAPI(title="Code Review Agent", version=APP_VERSION)
+app = FastAPI(title="CRA", version=APP_VERSION)
 
 # --- CORS ---
 # Configure allowed origins via env vars.
@@ -64,11 +65,13 @@ else:
 
 # v2 routes
 app.include_router(review_v2_router)
+app.include_router(format_router)
 
 # Duplicate v2 under /api/v2/... for frontend compatibility
 
 _api = APIRouter(prefix="/api")
 _api.include_router(review_v2_router)
+_api.include_router(format_router)
 app.include_router(_api)
 
 
@@ -82,6 +85,16 @@ def options_v2_review_file():
 
 @app.options("/api/v2/review/file")
 def options_api_v2_review_file():
+    return JSONResponse(content=None, status_code=200)
+
+
+@app.options("/v2/format")
+def options_v2_format():
+    return JSONResponse(content=None, status_code=200)
+
+
+@app.options("/api/v2/format")
+def options_api_v2_format():
     return JSONResponse(content=None, status_code=200)
 
 
@@ -116,6 +129,47 @@ def _normalize_github_repo_url(url: str) -> str:
     owner, repo = parts[0], parts[1]
     repo = re.sub(r"\.git$", "", repo, flags=re.IGNORECASE)
     return f"https://github.com/{owner}/{repo}"
+
+
+def _infer_language_from_filename(filename: str | None) -> str:
+    name = (filename or "").lower()
+    if name.endswith(".py"):
+        return "python"
+    if name.endswith(".js"):
+        return "javascript"
+    if name.endswith(".ts") or name.endswith(".tsx"):
+        return "typescript"
+    if name.endswith(".java"):
+        return "java"
+    if name.endswith(".cs"):
+        return "csharp"
+    if name.endswith(".go"):
+        return "go"
+    if name.endswith(".rs"):
+        return "rust"
+    if name.endswith(".php"):
+        return "php"
+    if name.endswith(".rb"):
+        return "ruby"
+    if name.endswith(".kt") or name.endswith(".kts"):
+        return "kotlin"
+    if name.endswith(".swift"):
+        return "swift"
+    if name.endswith(".c"):
+        return "c"
+    if name.endswith(".h"):
+        return "c"
+    if name.endswith(".cpp") or name.endswith(".cc") or name.endswith(".cxx"):
+        return "cpp"
+    if name.endswith(".hpp"):
+        return "cpp"
+    if name.endswith(".json"):
+        return "json"
+    if name.endswith(".yml") or name.endswith(".yaml"):
+        return "yaml"
+    if name.endswith(".md"):
+        return "markdown"
+    return "text"
 
 
 @app.post("/review", response_model=ReviewResponse)
@@ -182,12 +236,18 @@ async def review_file_endpoint(
     file: UploadFile = File(...),
     agent: CodeReviewAgent = Depends(get_agent),
     settings: Settings = Depends(deps.get_settings_dep),
+    x_code_language: str | None = Header(default=None, alias="X-Code-Language"),
 ):
-    """Multipart file-upload review endpoint."""
+    """Multipart file-upload review endpoint.
+
+    Optionally provide language via `X-Code-Language` header; otherwise it's inferred from filename.
+    """
     try:
         code, filename = await _read_code_from_file(file=file)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    lang = (x_code_language or "").strip().lower() or _infer_language_from_filename(filename)
 
     # Pass settings explicitly so tests can monkeypatch app.main.get_settings
     # and have it deterministically reflected here.
@@ -195,7 +255,7 @@ async def review_file_endpoint(
         _ensure_llm_configured(settings)
 
     try:
-        compressed, static_dict, issues = await agent.review(code=code, filename=filename, language="python")
+        compressed, static_dict, issues = await agent.review(code=code, filename=filename, language=lang)
     except RuntimeError as e:
         logger.warning("Review failed due to runtime error", extra={"source_filename": filename})
         raise HTTPException(status_code=502, detail=str(e))
@@ -220,7 +280,7 @@ async def review_github_endpoint(
     """Review a GitHub repo by fetching a single file from it.
 
     Accepts:
-      {"repo_url": "https://github.com/owner/repo", "path": "path/in/repo.py", "ref": "main", "strict": false}
+      {"repo_url": "https://github.com/owner/repo", "path": "path/in/repo.py", "ref": "main", "strict": false, "language": "optional"}
 
     Note: This uses the unauthenticated raw GitHub endpoint. Large/complex repos
     are intentionally out-of-scope for now.
@@ -230,8 +290,7 @@ async def review_github_endpoint(
     ref = (payload.get("ref") or "").strip() or "main"
     strict = bool(payload.get("strict") or False)
 
-    if not path.endswith(".py"):
-        raise HTTPException(status_code=400, detail="Only .py files are supported")
+    lang = (payload.get("language") or "").strip().lower() or _infer_language_from_filename(path)
 
     parsed = urllib.parse.urlparse(repo_url)
     owner, repo = [p for p in parsed.path.strip("/").split("/") if p][:2]
@@ -253,12 +312,10 @@ async def review_github_endpoint(
         raise HTTPException(status_code=400, detail=f"Failed to fetch file from GitHub (HTTP {r.status_code})")
 
     code = r.text
-    filename = os.path.basename(path) or "input.py"
+    filename = os.path.basename(path) or "input"
 
     try:
-        compressed, static_dict, issues = await agent.review(
-            code=code, filename=filename, language="python", strict=strict
-        )
+        compressed, static_dict, issues = await agent.review(code=code, filename=filename, language=lang, strict=strict)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -279,9 +336,7 @@ async def _read_code_from_file(*, file: UploadFile) -> tuple[str, str]:
         code = raw.decode("utf-8")
     except UnicodeDecodeError as e:
         raise ValueError("Uploaded file must be UTF-8 encoded") from e
-    filename = file.filename or "input.py"
-    if not filename.endswith(".py"):
-        filename = filename + ".py"
+    filename = file.filename or "input"
     return code, filename
 
 
@@ -322,7 +377,11 @@ def configz():
     llm_key_set = bool(os.getenv("LLM_API_KEY"))
     scaledown_key_set = bool(os.getenv("SCALEDOWN_API_KEY"))
     scaledown_enabled_raw = os.getenv("SCALEDOWN_ENABLED")
-    scaledown_enabled = None if scaledown_enabled_raw is None else (scaledown_enabled_raw.strip().lower() in {"1", "true", "yes", "y", "on"})
+    scaledown_enabled = (
+        None
+        if scaledown_enabled_raw is None
+        else (scaledown_enabled_raw.strip().lower() in {"1", "true", "yes", "y", "on"})
+    )
 
     fb_source = firebase_auth._cred_source()  # type: ignore[attr-defined]
     fb_initialized = bool(firebase_auth._init_admin())  # type: ignore[attr-defined]
@@ -413,6 +472,7 @@ if _FRONTEND_DIST_DIR.exists() and (os.getenv("SERVE_SPA", "").strip().lower() i
         if not index_path.exists():
             raise HTTPException(status_code=404, detail="Frontend not built")
         return FileResponse(str(index_path))
+
 
 # Log basic LLM configuration at startup (never log the key value)
 try:

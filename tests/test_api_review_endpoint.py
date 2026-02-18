@@ -192,10 +192,43 @@ def test_post_review_v2_non_python_language_offline_mode_succeeds(client):
     body = r.json()
     assert "issues" in body and isinstance(body["issues"], list)
     assert "score" in body and isinstance(body["score"], dict)
-    assert "score" in body["score"]
-    assert "counts_by_severity" in body["score"]
+    assert body["score"]["score"] == 100 if not body["issues"] else body["score"]["score"] <= 100
+
     assert "static_analysis" in body and isinstance(body["static_analysis"], dict)
     static = body["static_analysis"]
     assert (static.get("flake8") or {}).get("skipped") is True
     assert (static.get("bandit") or {}).get("skipped") is True
+    # eslint is either run (if installed) or explicitly skipped.
+    assert "eslint" in static
 
+
+def test_post_review_file_upload_non_python_language_offline_mode_succeeds(client):
+    os.environ["LLM_PROVIDER"] = "none"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
+
+    files = {"file": ("x.js", b"console.log('hi')\n", "text/javascript")}
+    r = client.post("/review/file", files=files)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "issues" in body and isinstance(body["issues"], list)
+    static = body.get("static_analysis") or {}
+    assert (static.get("flake8") or {}).get("skipped") is True
+    assert (static.get("bandit") or {}).get("skipped") is True
+
+
+def test_post_review_file_upload_python_extension_triggers_python_static_tools_offline_mode(client):
+    os.environ["LLM_PROVIDER"] = "none"
+    os.environ.pop("LLM_API_KEY", None)
+    os.environ.pop("LLM_BASE_URL", None)
+    os.environ.pop("LLM_MODEL", None)
+
+    files = {"file": ("x.py", b"print('hi')\n", "text/x-python")}
+    r = client.post("/review/file", files=files)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    static = body.get("static_analysis") or {}
+    # flake8/bandit may still be skipped in CI if tools aren't installed,
+    # but should at least not force-cast to non-python.
+    assert "flake8" in static and "bandit" in static

@@ -13,8 +13,8 @@ class CompressedContext:
 
 def compress_python_code(code: str) -> CompressedContext:
     stripped = _strip_comments(code)
-    tree = ast.parse(stripped)
-    tree = _strip_docstrings_ast(tree)
+    tree: ast.Module = ast.parse(stripped)
+    tree = _strip_docstrings_ast(tree)  # type: ignore[assignment]
 
     lines: list[str] = ["# Compressed Python context"]
 

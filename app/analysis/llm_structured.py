@@ -30,13 +30,10 @@ def build_llm_instructions(*, strict: bool) -> str:
         '"description":string,'
         '"impact":string,'
         '"suggestion":string'
-        '}]} '
+        "}]} "
     )
-    return (
-        "Return STRICT JSON only (no markdown, no code fences, no extra keys). "
-        "Format: "
-        + schema
-        + ("Be strict and exhaustive." if strict else "Prioritize high-signal issues.")
+    return "Return STRICT JSON only (no markdown, no code fences, no extra keys). " "Format: " + schema + (
+        "Be strict and exhaustive." if strict else "Prioritize high-signal issues."
     )
 
 

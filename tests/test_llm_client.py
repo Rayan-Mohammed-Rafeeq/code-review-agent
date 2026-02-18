@@ -383,4 +383,3 @@ async def test_request_llm_review_retries_on_429_then_succeeds(monkeypatch):
 
     assert issues == []
     assert state["calls"] == 3
-

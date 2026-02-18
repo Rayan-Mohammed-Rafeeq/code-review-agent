@@ -15,10 +15,22 @@ from app.analysis.models import (
     ReviewResult,
 )
 from app.analysis.preprocess import preprocess_code
-from app.analysis.static_tool_adapters import issues_from_bandit, issues_from_flake8
+from app.analysis.static_tool_adapters import (
+    issues_from_bandit,
+    issues_from_cargo_clippy,
+    issues_from_dotnet_format,
+    issues_from_flake8,
+    issues_from_golangci_lint,
+    issues_from_javac,
+)
 from app.rules.engine import run_custom_rules
 from app.scoring.scorer import score_issues
-from app.static_checks import run_static_analysis
+from app.static_checks import run_static_analysis_for_language
+
+
+def _is_js_ts_file(filename: str) -> bool:
+    name = (filename or "").lower()
+    return name.endswith(".js") or name.endswith(".jsx") or name.endswith(".ts") or name.endswith(".tsx")
 
 
 class ReviewPipeline:
@@ -38,21 +50,49 @@ class ReviewPipeline:
         code = preprocess_code(code=code)
         lang = (language or "python").strip().lower()
 
-        static_dict: dict[str, Any]
-        if lang == "python" and (filename or "").lower().endswith(".py"):
-            static = run_static_analysis(code=code, filename=filename)
-            static_dict = {"flake8": static.flake8, "bandit": static.bandit}
-        else:
-            static_dict = {"flake8": {"skipped": True}, "bandit": {"skipped": True}}
+        is_python_file = lang == "python" and (filename or "").lower().endswith(".py")
+        is_js_ts = lang in {"javascript", "typescript"} and _is_js_ts_file(filename)
+
+        static_dict = run_static_analysis_for_language(code=code, filename=filename, language=lang)
 
         issues = []
         diagnostics: list[ReviewDiagnostic] = []
 
-        if lang == "python":
+        if is_python_file:
             issues.extend(run_logical_checks(code=code, filename=filename, strict=strict))
             issues.extend(run_custom_rules(code=code, filename=filename, strict=strict, enabled_rules=enabled_rules))
             issues.extend(issues_from_flake8(flake8=static_dict.get("flake8") or {}, filename=filename))
             issues.extend(issues_from_bandit(bandit=static_dict.get("bandit") or {}, filename=filename))
+
+        if is_js_ts:
+            from app.analysis.static_tool_adapters import issues_from_eslint
+
+            eslint = static_dict.get("eslint") or {"skipped": True}
+            issues.extend(issues_from_eslint(eslint=eslint, filename=filename))
+        else:
+            static_dict.setdefault("eslint", {"skipped": True})
+
+        if lang == "java" and (filename or "").lower().endswith(".java"):
+            issues.extend(issues_from_javac(javac=static_dict.get("javac") or {}, filename=filename))
+        else:
+            static_dict.setdefault("javac", {"skipped": True})
+
+        if lang in {"c#", "csharp"} and (filename or "").lower().endswith(".cs"):
+            issues.extend(
+                issues_from_dotnet_format(dotnet_format=static_dict.get("dotnet_format") or {}, filename=filename)
+            )
+        else:
+            static_dict.setdefault("dotnet_format", {"skipped": True})
+
+        if lang == "go" and (filename or "").lower().endswith(".go"):
+            issues.extend(issues_from_golangci_lint(golangci=static_dict.get("golangci_lint") or {}, filename=filename))
+        else:
+            static_dict.setdefault("golangci_lint", {"skipped": True})
+
+        if lang == "rust" and (filename or "").lower().endswith(".rs"):
+            issues.extend(issues_from_cargo_clippy(clippy=static_dict.get("cargo_clippy") or {}, filename=filename))
+        else:
+            static_dict.setdefault("cargo_clippy", {"skipped": True})
 
         if self._llm is None:
             diagnostics.append(
@@ -88,7 +128,9 @@ class ReviewPipeline:
                 elif "timeout" in lower:
                     code_val = DiagnosticCode.llm_timeout
                     retryable = True
-                elif "http" in lower and any(s in lower for s in ["400", "401", "403", "404", "408", "429", "500", "502", "503", "504"]):
+                elif "http" in lower and any(
+                    s in lower for s in ["400", "401", "403", "404", "408", "429", "500", "502", "503", "504"]
+                ):
                     code_val = DiagnosticCode.llm_http_error
                     retryable = True if any(s in lower for s in ["408", "429", "500", "502", "503", "504"]) else False
                 elif "json" in lower:
@@ -149,5 +191,7 @@ class ReviewPipeline:
 
         all_issues = dedupe_issues(all_issues)
         overall_score = score_issues(issues=all_issues, strict=req.strict)
-        overall = ReviewResult(issues=all_issues, score=overall_score, static_analysis=overall_static, diagnostics=diagnostics)
+        overall = ReviewResult(
+            issues=all_issues, score=overall_score, static_analysis=overall_static, diagnostics=diagnostics
+        )
         return ProjectReviewResult(files=per_file, overall=overall, diagnostics=diagnostics)

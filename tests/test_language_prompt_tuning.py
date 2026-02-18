@@ -19,7 +19,9 @@ class _DummyLLM(LLMClient):
 
 def test_prompt_contains_typescript_tuning():
     agent = CodeReviewAgent(_DummyLLM(api_key="", base_url="", model="", timeout_seconds=1))
-    prompt = agent._build_review_prompt("CTX", {"flake8": {"skipped": True}, "bandit": {"skipped": True}}, language="typescript", strict=False)
+    prompt = agent._build_review_prompt(
+        "CTX", {"flake8": {"skipped": True}, "bandit": {"skipped": True}}, language="typescript", strict=False
+    )
     payload = json.loads(prompt)
     assert payload["language"] == "typescript"
     assert "TypeScript" in payload["instructions"]
@@ -28,8 +30,9 @@ def test_prompt_contains_typescript_tuning():
 
 def test_prompt_unknown_language_falls_back_to_general():
     agent = CodeReviewAgent(_DummyLLM(api_key="", base_url="", model="", timeout_seconds=1))
-    prompt = agent._build_review_prompt("CTX", {"flake8": {"skipped": True}, "bandit": {"skipped": True}}, language="kotlin", strict=False)
+    prompt = agent._build_review_prompt(
+        "CTX", {"flake8": {"skipped": True}, "bandit": {"skipped": True}}, language="kotlin", strict=False
+    )
     payload = json.loads(prompt)
     assert payload["language"] == "kotlin"
     assert "General:" in payload["instructions"]
-

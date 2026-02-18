@@ -22,7 +22,9 @@ class Category(str, Enum):
     style = "style"
 
 
-IssueSource = Literal["custom_rules", "flake8", "bandit", "llm"]
+IssueSource = Literal[
+    "custom_rules", "flake8", "bandit", "eslint", "llm", "javac", "dotnet_format", "golangci-lint", "clippy"
+]
 
 
 class Issue(BaseModel):
