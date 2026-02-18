@@ -10,6 +10,7 @@ import requests
 from fastapi import APIRouter, Body, Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
 
 from app import deps, firebase_auth
 from app.ai_agent import CodeReviewAgent
@@ -29,6 +30,38 @@ APP_VERSION = "1.0.0"
 
 app = FastAPI(title="Code Review Agent", version=APP_VERSION)
 
+# --- CORS ---
+# Configure allowed origins via env vars.
+#
+# Render/Vercel notes:
+# - If your frontend is on Vercel, set CODE_REVIEW_CORS_ORIGINS to the exact deployed URL(s),
+#   e.g. https://coderagent.vercel.app
+# - If you also want to allow Vercel preview deployments, set CODE_REVIEW_CORS_ORIGIN_REGEX to
+#   something like: ^https://.*\\.vercel\\.app$
+#
+# Examples:
+#   CODE_REVIEW_CORS_ORIGINS=https://my-ui.vercel.app,https://my-ui.custom-domain.com
+#   CODE_REVIEW_CORS_ORIGIN_REGEX=^https://.*\\.vercel\\.app$
+_cors_origins_raw = os.getenv("CODE_REVIEW_CORS_ORIGINS", "").strip()
+_cors_origin_regex = os.getenv("CODE_REVIEW_CORS_ORIGIN_REGEX", "").strip()
+
+if _cors_origins_raw or _cors_origin_regex:
+    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_origin_regex=_cors_origin_regex or None,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    logger.warning(
+        "CORS is not configured. Set CODE_REVIEW_CORS_ORIGINS (and optionally CODE_REVIEW_CORS_ORIGIN_REGEX) "
+        "to allow browser clients.",
+        extra={"env": "CODE_REVIEW_CORS_ORIGINS"},
+    )
+
 # v2 routes
 app.include_router(review_v2_router)
 
@@ -37,6 +70,20 @@ app.include_router(review_v2_router)
 _api = APIRouter(prefix="/api")
 _api.include_router(review_v2_router)
 app.include_router(_api)
+
+
+# --- Preflight (OPTIONS) helpers ---
+# Some hosting/proxy setups can surface 405s for OPTIONS even when CORSMiddleware is present.
+# Explicitly answering OPTIONS keeps browser clients working reliably.
+@app.options("/v2/review/file")
+def options_v2_review_file():
+    return JSONResponse(content=None, status_code=200)
+
+
+@app.options("/api/v2/review/file")
+def options_api_v2_review_file():
+    return JSONResponse(content=None, status_code=200)
+
 
 # --- Frontend (React) static serving ---
 # In production, we serve the built SPA from frontend/dist/spa.
