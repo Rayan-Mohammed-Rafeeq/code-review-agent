@@ -14,6 +14,14 @@ A production-quality, modular code review service that combines deterministic st
 - **Prompt optimization**: context compression + optional ScaleDown compression
 
 ---
+## Live Deployment Links
+
+- Frontend (Vercel): https://coderagent.vercel.app/
+- Backend (Render): https://code-review-agent-api.onrender.com/
+
+> Tip: If you call the API from a browser, the backend must allow your frontend origin via `CODE_REVIEW_CORS_ORIGINS` (example: `https://coderagent.vercel.app`).
+
+---
 
 ## On this page
 
@@ -94,14 +102,7 @@ High-level pipeline overview:
 
 ---
 
-## Live Deployment Links
 
-- Frontend (Vercel): https://coderagent.vercel.app/
-- Backend (Render): https://code-review-agent-api.onrender.com/
-
-> Tip: If you call the API from a browser, the backend must allow your frontend origin via `CODE_REVIEW_CORS_ORIGINS` (example: `https://coderagent.vercel.app`).
-
----
 
 ## API Quick Start
 
